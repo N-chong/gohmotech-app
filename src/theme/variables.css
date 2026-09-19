@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light;
+
+  --ion-color-primary: #0cae7d;
+  --ion-color-primary-rgb: 12, 174, 125;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-shade: #0b996e;
+  --ion-color-primary-tint: #24b68a;
+  --ion-color-secondary: #2f8cff;
+  --ion-color-secondary-rgb: 47, 140, 255;
+  --ion-color-secondary-contrast: #ffffff;
+  --ion-color-tertiary: #28d7e1;
+  --ion-color-success: #19c889;
+  --ion-color-warning: #ffb547;
+  --ion-color-danger: #ff5f73;
+  --ion-background-color: #f3f7f8;
+  --ion-text-color: #102a38;
+  --ion-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* Brand spectrum */
+  --goh-ink: #061826;
+  --goh-navy: #09263d;
+  --goh-navy-raised: #0d3450;
+  --goh-blue: #2f8cff;
+  --goh-cyan: #28d7e1;
+  --goh-green: #0cae7d;
+  --goh-emerald: #19c889;
+  --goh-forest: #08745a;
+  --goh-lime: #9be15d;
+  --goh-gold: #ffb547;
+  --goh-danger: #ff5f73;
+
+  /* Semantic surfaces and text */
+  --goh-canvas: #f3f7f8;
+  --goh-surface: #ffffff;
+  --goh-surface-raised: #f8fbfc;
+  --goh-text: #102a38;
+  --goh-text-soft: #526b78;
+  --goh-muted: #718590;
+  --goh-border: #dce8eb;
+  --goh-border-strong: #c8d9de;
+
+  /* Shape, depth, and motion */
+  --goh-radius-sm: 12px;
+  --goh-radius-md: 18px;
+  --goh-radius-lg: 24px;
+  --goh-radius-xl: 30px;
+  --goh-shadow-sm: 0 8px 24px rgba(8, 39, 55, .07);
+  --goh-shadow-md: 0 18px 44px rgba(8, 39, 55, .12);
+  --goh-shadow-dark: 0 20px 48px rgba(2, 16, 27, .28);
+  --goh-glow-blue: 0 0 28px rgba(47, 140, 255, .22);
+  --goh-glow-green: 0 0 28px rgba(25, 200, 137, .22);
+  --goh-duration-fast: 160ms;
+  --goh-duration-base: 240ms;
+  --goh-duration-data: 340ms;
+  --goh-ease: cubic-bezier(.2, .8, .2, 1);
+}
