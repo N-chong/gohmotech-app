@@ -170,3 +170,24 @@ describe('monitoring API contracts', () => {
     expect(request).toHaveBeenCalledWith('/security/api/notifications/19/mark_read/', expect.objectContaining({ method: 'POST' }))
   })
 })
+
+describe('Ionic navigation topology', () => {
+  test('keeps secondary screens in the same tab router outlet as their back destinations', async () => {
+    const { default: router } = await import('@/router')
+    const secondaryPaths = [
+      '/app/automation',
+      '/app/tracking',
+      '/app/security',
+      '/app/reports',
+      '/app/marketplace',
+      '/app/goats/GOAT-001',
+    ]
+
+    for (const path of secondaryPaths) {
+      const resolved = router.resolve(path)
+      expect(resolved.matched[0]?.path).toBe('/app')
+      expect(resolved.matched).toHaveLength(2)
+      expect(resolved.meta.hideTabs).toBe(true)
+    }
+  })
+})

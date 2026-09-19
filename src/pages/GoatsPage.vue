@@ -51,8 +51,8 @@ function clearFilters() { search.value = ''; filter.value = 'all'; void load(); 
 function startLongPress(goat: Goat) { longPressed.value = false; pressTimer = window.setTimeout(() => { longPressed.value = true; selectedGoat.value = goat; impact(ImpactStyle.Medium); }, 560); }
 function cancelLongPress() { if (pressTimer) window.clearTimeout(pressTimer); }
 function finishPress(goat: Goat) { cancelLongPress(); if (!longPressed.value) openProfile(goat); window.setTimeout(() => { longPressed.value = false; }, 0); }
-async function openProfile(goat: Goat) { cancelLongPress(); selectedGoat.value = undefined; impact(); await router.push(`/goats/${encodeURIComponent(goat.goat_id)}`); }
-async function openTracking() { selectedGoat.value = undefined; impact(); await router.push('/tracking'); }
+async function openProfile(goat: Goat) { cancelLongPress(); selectedGoat.value = undefined; impact(); await router.push(`/app/goats/${encodeURIComponent(goat.goat_id)}`); }
+async function openTracking() { selectedGoat.value = undefined; impact(); await router.push('/app/tracking'); }
 async function load() { loading.value = true; error.value = ''; try { const result = await goatService.list(search.value); goats.value = result.results; total.value = result.count; } catch { error.value = 'The livestock inventory could not be retrieved.'; } finally { loading.value = false; } }
 async function refresh(event: CustomEvent) { await load(); (event.target as HTMLIonRefresherElement).complete(); }
 onMounted(load); onBeforeUnmount(cancelLongPress);

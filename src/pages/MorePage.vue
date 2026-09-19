@@ -16,7 +16,7 @@
         <p v-if="contextError" class="hub-context-note"><ion-icon :icon="cloudOfflineOutline" />Live context is temporarily unavailable. Navigation remains ready.</p>
 
         <section class="hub-focus-action">
-          <div><p class="eyebrow">QUICK CONTROL</p><h2>Farm operations</h2><span>Door, lighting, and feeding controls</span></div><router-link to="/automation" @click="tapImpact">OPEN CONTROLS <ion-icon :icon="chevronForwardOutline" /></router-link>
+          <div><p class="eyebrow">QUICK CONTROL</p><h2>Farm operations</h2><span>Door, lighting, and feeding controls</span></div><router-link to="/app/automation" @click="tapImpact">OPEN CONTROLS <ion-icon :icon="chevronForwardOutline" /></router-link>
         </section>
 
         <section v-for="group in groups" :key="group.title" class="hub-group">
@@ -55,15 +55,15 @@ const detectedGoats = computed(() => tracking.value?.goats.filter((item) => item
 const unreadAlerts = computed(() => alerts.value.filter((item) => !item.is_read).length);
 const groups = computed(() => [
   { eyebrow: 'FARM MANAGEMENT', title: 'Operate & understand', items: [
-    { path: '/automation', title: 'Automation', copy: 'Door, lighting, and feeding', context: dashboard.value ? `Door ${titleCase(dashboard.value.automation.door?.state || 'unknown')} · Light ${titleCase(dashboard.value.automation.light?.state || 'unknown')}` : '', icon: optionsOutline, color: 'green' },
-    { path: '/tracking', title: 'Goat tracking', copy: 'BLE proximity and last seen', context: tracking.value ? `${detectedGoats.value}/${tracking.value.goats.length} tags currently detected` : '', icon: mapOutline, color: 'blue' },
-    { path: '/reports', title: 'Farm intelligence', copy: 'Current operational snapshot', context: dashboard.value ? `${dashboard.value.system.iot_online}/${dashboard.value.system.iot_total} IoT devices online` : '', icon: barChartOutline, color: 'cyan' },
+    { path: '/app/automation', title: 'Automation', copy: 'Door, lighting, and feeding', context: dashboard.value ? `Door ${titleCase(dashboard.value.automation.door?.state || 'unknown')} · Light ${titleCase(dashboard.value.automation.light?.state || 'unknown')}` : '', icon: optionsOutline, color: 'green' },
+    { path: '/app/tracking', title: 'Goat tracking', copy: 'BLE proximity and last seen', context: tracking.value ? `${detectedGoats.value}/${tracking.value.goats.length} tags currently detected` : '', icon: mapOutline, color: 'blue' },
+    { path: '/app/reports', title: 'Farm intelligence', copy: 'Current operational snapshot', context: dashboard.value ? `${dashboard.value.system.iot_online}/${dashboard.value.system.iot_total} IoT devices online` : '', icon: barChartOutline, color: 'cyan' },
   ] },
   { eyebrow: 'SECURITY', title: 'Monitor & protect', items: [
-    { path: '/security', title: 'Security center', copy: 'Detections and event details', context: unreadAlerts.value ? `${unreadAlerts.value} unread alert${unreadAlerts.value === 1 ? '' : 's'}` : 'No unread notifications', icon: lockClosedOutline, color: 'navy' },
+    { path: '/app/security', title: 'Security center', copy: 'Detections and event details', context: unreadAlerts.value ? `${unreadAlerts.value} unread alert${unreadAlerts.value === 1 ? '' : 's'}` : 'No unread notifications', icon: lockClosedOutline, color: 'navy' },
   ] },
   { eyebrow: 'MARKETPLACE', title: 'Trade & connect', items: [
-    { path: '/marketplace', title: 'Marketplace', copy: 'Livestock commerce workspace', context: 'Mobile API integration pending', icon: storefrontOutline, color: 'gold' },
+    { path: '/app/marketplace', title: 'Marketplace', copy: 'Livestock commerce workspace', context: 'Mobile API integration pending', icon: storefrontOutline, color: 'gold' },
   ] },
 ]);
 

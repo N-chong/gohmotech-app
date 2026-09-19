@@ -35,14 +35,14 @@
               <div v-for="row in genderRows" :key="row.label" class="distribution-row"><span><b>{{ row.label }}</b><small>{{ row.value }} goats</small></span><div><i :style="{ width: `${row.percent}%` }"></i></div><strong>{{ row.percent }}%</strong></div>
               <p v-if="!genderRows.length">No goat profiles were returned in the current inventory page.</p>
             </article>
-            <article class="tracking-report-panel"><header><span><ion-icon :icon="radioOutline" /></span><div><p class="eyebrow">BLE COVERAGE</p><h2>Receiver visibility</h2></div></header><div><span><strong>{{ proximityCount('near') }}</strong><small>NEAR</small></span><span><strong>{{ proximityCount('far') }}</strong><small>FAR</small></span><span><strong>{{ notDetectedCount }}</strong><small>NOT DETECTED</small></span></div><router-link to="/tracking">OPEN TRACKING RADAR <ion-icon :icon="chevronForwardOutline" /></router-link></article>
+            <article class="tracking-report-panel"><header><span><ion-icon :icon="radioOutline" /></span><div><p class="eyebrow">BLE COVERAGE</p><h2>Receiver visibility</h2></div></header><div><span><strong>{{ proximityCount('near') }}</strong><small>NEAR</small></span><span><strong>{{ proximityCount('far') }}</strong><small>FAR</small></span><span><strong>{{ notDetectedCount }}</strong><small>NOT DETECTED</small></span></div><router-link to="/app/tracking">OPEN TRACKING RADAR <ion-icon :icon="chevronForwardOutline" /></router-link></article>
           </section>
 
           <section v-else class="report-view">
             <div class="report-section-heading"><div><p class="eyebrow">SECURITY QUALITY</p><h2>Detection review snapshot</h2></div><span>{{ detections?.results.length || 0 }} loaded</span></div>
             <article class="security-report-focus"><div class="confidence-orb" :style="{ '--confidence': `${averageConfidence * 3.6}deg` }"><strong>{{ averageConfidence }}</strong><small>% AVG</small></div><div><h2>Detection confidence</h2><p>Average across the currently loaded security events.</p><span>{{ reviewedDetections }} reviewed · {{ pendingDetections }} pending</span></div></article>
             <div class="security-report-list"><article v-for="item in detections?.results.slice(0, 4)" :key="item.id"><span><ion-icon :icon="scanOutline" /></span><div><strong>{{ item.detection_type_display }}</strong><small>{{ item.source_display }} · {{ relativeTime(item.detected_at) }}</small></div><b>{{ Math.round(item.confidence * 100) }}%</b></article><p v-if="!detections?.results.length">No security detection records are available.</p></div>
-            <router-link class="report-deep-link" to="/security">VIEW SECURITY TIMELINE <ion-icon :icon="chevronForwardOutline" /></router-link>
+            <router-link class="report-deep-link" to="/app/security">VIEW SECURITY TIMELINE <ion-icon :icon="chevronForwardOutline" /></router-link>
           </section>
 
           <section class="report-scope-note"><ion-icon :icon="layersOutline" /><div><strong>Current-state reporting</strong><p>Historical curves and date comparisons remain hidden until the backend provides real time-series data.</p></div></section>

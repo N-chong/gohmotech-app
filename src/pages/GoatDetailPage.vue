@@ -67,7 +67,7 @@ function galleryPointerStart(event: PointerEvent) { pointerX.value = event.clien
 function galleryPointerEnd(event: PointerEvent) { const distance = event.clientX - pointerX.value; if (Math.abs(distance) > 50) changeImage(distance < 0 ? 1 : -1); }
 function formattedDate(value: string) { return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
 function formattedTime(value: string) { return new Date(value).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); }
-async function openTracking() { impact(); await router.push('/tracking'); }
+async function openTracking() { impact(); await router.push('/app/tracking'); }
 async function load() { loading.value = true; error.value = ''; try { goat.value = await goatService.detail(String(route.params.goatId)); activeImageIndex.value = 0; } catch { error.value = 'The goat profile could not be retrieved.'; } finally { loading.value = false; } }
 onMounted(load);
 </script>

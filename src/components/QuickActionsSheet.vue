@@ -29,9 +29,9 @@ import { authState } from '@/stores/auth.store';
 const open = ref(false);
 const router = useRouter();
 const actions = computed(() => [
-  ...(authState.user?.permissions.manage_farm ? [{ label: 'Farm controls', copy: 'Door, light & feeding', path: '/automation', icon: optionsOutline, tone: 'green' }] : []),
+  ...(authState.user?.permissions.manage_farm ? [{ label: 'Farm controls', copy: 'Door, light & feeding', path: '/app/automation', icon: optionsOutline, tone: 'green' }] : []),
   { label: 'Live cameras', copy: 'Open monitoring', path: '/app/live', icon: videocamOutline, tone: 'blue' },
-  { label: 'Find a goat', copy: 'BLE proximity', path: '/tracking', icon: mapOutline, tone: 'cyan' },
+  { label: 'Find a goat', copy: 'BLE proximity', path: '/app/tracking', icon: mapOutline, tone: 'cyan' },
   { label: 'Goat inventory', copy: 'Profiles & weight', path: '/app/goats', icon: pawOutline, tone: 'forest' },
   { label: 'View alerts', copy: 'Review activity', path: '/app/alerts', icon: notificationsOutline, tone: 'gold' },
 ]);
