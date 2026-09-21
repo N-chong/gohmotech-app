@@ -41,8 +41,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { IonButton, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonSpinner, IonTitle, IonToolbar } from '@ionic/vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { IonButton, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonSpinner, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave } from '@ionic/vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { alertCircleOutline, chevronForwardOutline, expandOutline, informationCircleOutline, pulseOutline, refreshOutline, scanOutline, shieldCheckmarkOutline, swapHorizontalOutline, timeOutline, videocamOffOutline, videocamOutline, wifiOutline } from 'ionicons/icons';
 import NetworkBanner from '@/components/NetworkBanner.vue';
@@ -52,20 +52,45 @@ import type { Camera } from '@/types/api';
 import { relativeTime, titleCase } from '@/utils/format';
 
 const cameras = ref<Camera[]>([]); const selected = ref<Camera>(); const streamUrl = ref(''); const loading = ref(true); const error = ref(''); const playing = ref(false); const now = ref(new Date());
-const controlsVisible = ref(false); const cameraInfoOpen = ref(false); const pointerX = ref(0); let controlsTimer: number | undefined; let clockTimer: number | undefined;
+const controlsVisible = ref(false); const cameraInfoOpen = ref(false); const pointerX = ref(0); let controlsTimer: number | undefined; let clockTimer: number | undefined; let streamController: AbortController | undefined; let streamGeneration = 0; let pageActive = false;
 const activeCount = computed(() => cameras.value.filter((camera) => camera.status === 'active').length);
 const currentTime = computed(() => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(now.value));
 function impact() { void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }
-async function connect(camera: Camera) { playing.value = false; streamUrl.value = ''; error.value = ''; if (camera.status !== 'active') return; try { streamUrl.value = await cameraService.streamUrl(camera.id); } catch { error.value = 'The secure camera stream could not be started.'; } }
+async function connect(camera: Camera) {
+  streamController?.abort();
+  const controller = new AbortController();
+  streamController = controller;
+  const generation = ++streamGeneration;
+  playing.value = false; streamUrl.value = ''; error.value = '';
+  if (camera.status !== 'active' || !pageActive) return;
+  try {
+    const url = await cameraService.streamUrl(camera.id, controller.signal);
+    if (pageActive && !controller.signal.aborted && generation === streamGeneration) streamUrl.value = url;
+  } catch {
+    if (pageActive && !controller.signal.aborted && generation === streamGeneration) error.value = 'The secure camera stream could not be started.';
+  }
+}
 async function select(camera: Camera) { if (camera.id === selected.value?.id && streamUrl.value) return; selected.value = camera; controlsVisible.value = false; impact(); await connect(camera); }
 async function switchCamera(direction: number) { if (cameras.value.length < 2 || !selected.value) return; const current = cameras.value.findIndex((camera) => camera.id === selected.value?.id); const target = (current + direction + cameras.value.length) % cameras.value.length; await select(cameras.value[target]); }
 function pointerStart(event: PointerEvent) { pointerX.value = event.clientX; }
 function pointerEnd(event: PointerEvent) { const distance = event.clientX - pointerX.value; if (Math.abs(distance) > 55) { void switchCamera(distance < 0 ? 1 : -1); pointerX.value = event.clientX; } }
 function revealControls() { controlsVisible.value = !controlsVisible.value; impact(); if (controlsTimer) window.clearTimeout(controlsTimer); if (controlsVisible.value) controlsTimer = window.setTimeout(() => { controlsVisible.value = false; }, 5000); }
 function openCameraInfo() { cameraInfoOpen.value = true; controlsVisible.value = false; impact(); }
-async function load() { loading.value = true; error.value = ''; try { const result = await cameraService.list(); cameras.value = result.results; if (cameras.value.length) await select(cameras.value[0]); } catch { error.value = 'Unable to retrieve configured cameras.'; } finally { loading.value = false; } }
+async function load() { loading.value = true; error.value = ''; try { const result = await cameraService.list(); cameras.value = result.results; if (pageActive && cameras.value.length) await select(cameras.value[0]); } catch { if (pageActive) error.value = 'Unable to retrieve configured cameras.'; } finally { loading.value = false; } }
 function streamFailed() { playing.value = false; error.value = 'The camera stream stopped.'; }
 async function fullscreen() { impact(); const stage = document.querySelector('.interactive-viewer') as HTMLElement | null; await stage?.requestFullscreen?.(); }
-onMounted(() => { void load(); clockTimer = window.setInterval(() => { now.value = new Date(); }, 1000); });
-onBeforeUnmount(() => { if (clockTimer) window.clearInterval(clockTimer); if (controlsTimer) window.clearTimeout(controlsTimer); });
+function startPage() {
+  pageActive = true; now.value = new Date();
+  if (!clockTimer) clockTimer = window.setInterval(() => { now.value = new Date(); }, 1000);
+  void load();
+}
+function stopPage() {
+  pageActive = false; streamGeneration += 1; streamController?.abort(); streamController = undefined;
+  streamUrl.value = ''; playing.value = false; controlsVisible.value = false; cameraInfoOpen.value = false;
+  if (clockTimer) window.clearInterval(clockTimer); clockTimer = undefined;
+  if (controlsTimer) window.clearTimeout(controlsTimer); controlsTimer = undefined;
+}
+onIonViewDidEnter(startPage);
+onIonViewDidLeave(stopPage);
+onBeforeUnmount(stopPage);
 </script>

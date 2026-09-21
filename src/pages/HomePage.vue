@@ -63,8 +63,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { IonButton, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar } from '@ionic/vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { IonButton, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave } from '@ionic/vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { alertCircleOutline, bulbOutline, cameraOutline, chevronForwardOutline, enterOutline, hardwareChipOutline, informationCircleOutline, notificationsOutline, nutritionOutline, pawOutline, shieldCheckmarkOutline, sunnyOutline, thermometerOutline, videocamOutline, waterOutline, wifiOutline } from 'ionicons/icons';
 import NetworkBanner from '@/components/NetworkBanner.vue';
@@ -74,11 +74,12 @@ import { authState } from '@/stores/auth.store';
 import type { DashboardData } from '@/types/api';
 import { relativeTime, titleCase } from '@/utils/format';
 import { FarmSocket } from '@/services/websocket.service';
+import { RefreshScheduler } from '@/services/refresh-scheduler';
 
 type EnvironmentKey = 'temperature' | 'humidity' | 'light';
 const data = ref<DashboardData>(); const loading = ref(true); const error = ref(''); const now = ref(new Date());
 const selectedEnvironment = ref<EnvironmentKey>('temperature'); const changedMetric = ref<EnvironmentKey | null>(null); const deltas = ref<Record<EnvironmentKey, number | null>>({ temperature: null, humidity: null, light: null });
-const healthOpen = ref(false); let socket: FarmSocket | undefined; let clockTimer: number | undefined; let changeTimer: number | undefined;
+const healthOpen = ref(false); let clockTimer: number | undefined; let changeTimer: number | undefined; let loadController: AbortController | undefined; let loadPromise: Promise<void> | undefined;
 const firstName = computed(() => authState.user?.display_name.split(' ')[0] || 'Owner');
 const greeting = computed(() => { const hour = now.value.getHours(); return hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'; });
 const currentDate = computed(() => new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(now.value));
@@ -124,8 +125,40 @@ function captureChanges(previous: DashboardData | undefined, next: DashboardData
   if (changeTimer) window.clearTimeout(changeTimer);
   changeTimer = window.setTimeout(() => { changedMetric.value = null; deltas.value[changed[0]] = null; }, 2400);
 }
-async function load() { loading.value = true; error.value = ''; try { const next = await dashboardService.get(); captureChanges(data.value, next); data.value = next; } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Unable to retrieve farm status.'; } finally { loading.value = false; } }
+async function load() {
+  if (loadPromise) return loadPromise;
+  const controller = new AbortController();
+  loadController = controller;
+  const pending = (async () => {
+    loading.value = true; error.value = '';
+    try {
+      const next = await dashboardService.get(controller.signal);
+      if (!controller.signal.aborted) { captureChanges(data.value, next); data.value = next; }
+    } catch (reason) {
+      if (!controller.signal.aborted) error.value = reason instanceof Error ? reason.message : 'Unable to retrieve farm status.';
+    } finally {
+      if (loadController === controller) { loadController = undefined; loading.value = false; }
+    }
+  })();
+  loadPromise = pending;
+  try { await pending; } finally { if (loadPromise === pending) loadPromise = undefined; }
+}
 async function refresh(event: CustomEvent) { await load(); (event.target as HTMLIonRefresherElement).complete(); }
-onMounted(() => { void load(); clockTimer = window.setInterval(() => { now.value = new Date(); }, 30000); socket = new FarmSocket('sensors', () => void load()); void socket.connect().catch(() => undefined); });
-onBeforeUnmount(() => { socket?.close(); if (clockTimer) window.clearInterval(clockTimer); if (changeTimer) window.clearTimeout(changeTimer); });
+const refreshScheduler = new RefreshScheduler(load, 5_000);
+const socket = new FarmSocket('sensors', () => refreshScheduler.notify());
+function startPage() {
+  now.value = new Date();
+  if (!clockTimer) clockTimer = window.setInterval(() => { now.value = new Date(); }, 30000);
+  void refreshScheduler.start().catch(() => undefined);
+  void socket.connect().catch(() => undefined);
+}
+function stopPage() {
+  refreshScheduler.stop(); socket.close(); loadController?.abort(); loadController = undefined; loadPromise = undefined;
+  if (clockTimer) window.clearInterval(clockTimer); clockTimer = undefined;
+  if (changeTimer) window.clearTimeout(changeTimer); changeTimer = undefined;
+  healthOpen.value = false;
+}
+onIonViewDidEnter(startPage);
+onIonViewDidLeave(stopPage);
+onBeforeUnmount(stopPage);
 </script>
