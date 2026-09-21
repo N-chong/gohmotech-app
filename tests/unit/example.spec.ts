@@ -23,10 +23,13 @@ describe('mobile session restoration', () => {
     vi.resetModules()
   })
 
-  test('restores authentication after a page reload in the same app window', async () => {
+  test('migrates and restores authentication after a page reload', async () => {
     window.sessionStorage.setItem('gohmotech.mobile.session', JSON.stringify({ token: 'test-token', user }))
     vi.resetModules()
-    const { authState } = await import('@/stores/auth.store')
+    const { authState, readStoredSession, restoreSession } = await import('@/stores/auth.store')
+    const restored = await readStoredSession()
+    expect(restored).not.toBeNull()
+    restoreSession(restored!)
     expect(authState.token).toBe('test-token')
     expect(authState.user?.display_name).toBe('Farm Owner')
   })
@@ -98,16 +101,33 @@ describe('camera and automation service contracts', () => {
     expect(stream).toContain('/api/mobile/cameras/7/stream/?quality=55&fps=8&width=640&ticket=camera-ticket')
   })
 
-  test('sends actuator commands to the existing control endpoint without changing the payload', async () => {
+  test('sends actuator commands to the existing control endpoint only when its controller is online', async () => {
     const request = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ message: 'Accepted', current_state: 'open', result: 'ok', device_online: true }) })
     vi.stubGlobal('fetch', request)
     const { automationService } = await import('@/services/automation.service')
+    const { markServerOnline, applyActuatorStatus } = await import('@/stores/device.store')
+    const actuator = { id: 3, device_name: 'Door', actuator_type: 'door' as const, current_state: 'closed', current_state_display: 'Closed', mode: 'manual', mode_display: 'Manual', last_changed_at: '', device_online: true }
+    markServerOnline()
+    applyActuatorStatus([actuator])
 
-    const response = await automationService.control(3, 'open')
+    const response = await automationService.control(actuator, 'open')
 
     expect(request).toHaveBeenCalledWith('/iot/api/actuators/3/control/', expect.objectContaining({ method: 'POST' }))
     expect(JSON.parse(String((request.mock.calls[0][1] as RequestInit).body))).toEqual({ state: 'open' })
     expect(response.current_state).toBe('open')
+  })
+
+  test('rejects an offline actuator locally without queuing or sending a command', async () => {
+    const request = vi.fn()
+    vi.stubGlobal('fetch', request)
+    const { automationService } = await import('@/services/automation.service')
+    const { markServerOnline, applyActuatorStatus } = await import('@/stores/device.store')
+    const actuator = { id: 8, device_name: 'Feeder', actuator_type: 'feeder' as const, current_state: 'idle', current_state_display: 'Idle', mode: 'manual', mode_display: 'Manual', last_changed_at: '', device_online: false }
+    markServerOnline()
+    applyActuatorStatus([actuator])
+
+    await expect(automationService.control(actuator, 'feed')).rejects.toMatchObject({ code: 'DEVICE_OFFLINE' })
+    expect(request).not.toHaveBeenCalled()
   })
 })
 

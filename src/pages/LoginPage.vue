@@ -32,9 +32,9 @@
             <AuthAccessField v-model="username" label="USERNAME OR EMAIL" :icon="personOutline" autocomplete="username" placeholder="Farm account identity" :invalid="phase === 'denied'" @interaction="lightImpact" />
             <AuthAccessField v-model="password" label="ACCESS KEY" :icon="keyOutline" type="password" autocomplete="current-password" placeholder="Enter your password" :invalid="phase === 'denied'" @interaction="lightImpact" />
 
-            <div v-if="phase === 'denied' || phase === 'offline'" class="access-message" :class="phase" role="alert">
+            <div v-if="phase === 'denied' || phase === 'offline' || phase === 'expired'" class="access-message" :class="phase" role="alert">
               <ion-icon :icon="phase === 'offline' ? cloudOfflineOutline : alertCircleOutline" />
-              <div><strong>{{ phase === 'offline' ? 'FARM SERVER UNREACHABLE' : 'ACCESS DENIED' }}</strong><p>{{ error }}</p></div>
+              <div><strong>{{ phase === 'offline' ? 'FARM SERVER UNREACHABLE' : phase === 'expired' ? 'SESSION EXPIRED' : 'ACCESS DENIED' }}</strong><p>{{ error }}</p></div>
               <button v-if="phase === 'offline'" type="button" @click="checkServer">TRY AGAIN</button>
             </div>
 
@@ -67,7 +67,7 @@ import FarmNetworkScene from '@/components/FarmNetworkScene.vue';
 import { authService } from '@/services/auth.service';
 import { API_BASE, ApiError } from '@/services/api';
 
-type AuthPhase = 'idle' | 'authenticating' | 'connecting' | 'granted' | 'denied' | 'offline';
+type AuthPhase = 'idle' | 'authenticating' | 'connecting' | 'granted' | 'denied' | 'offline' | 'expired';
 type ServerState = 'checking' | 'available' | 'unavailable';
 const username = ref('');
 const password = ref('');
@@ -84,8 +84,8 @@ let phaseTimer = 0;
 
 const busy = computed(() => ['authenticating', 'connecting', 'granted'].includes(phase.value));
 const serverLabel = computed(() => serverState.value === 'checking' ? 'CHECKING FARM LINK' : serverState.value === 'available' ? 'FARM LINK ONLINE' : 'FARM LINK UNAVAILABLE');
-const phaseLabel = computed(() => ({ idle: 'ENTER FARM SYSTEM', authenticating: 'AUTHENTICATING', connecting: 'CONNECTING TO GOHMO', granted: 'ACCESS GRANTED', denied: 'TRY ACCESS AGAIN', offline: 'RECONNECT TO FARM' }[phase.value]));
-const phaseStep = computed(() => ({ idle: 'SECURE ENTRY', authenticating: 'STEP 01 / VERIFY', connecting: 'STEP 02 / CONNECT', granted: 'IDENTITY CONFIRMED', denied: 'CREDENTIALS REJECTED', offline: 'CONNECTION REQUIRED' }[phase.value]));
+const phaseLabel = computed(() => ({ idle: 'ENTER FARM SYSTEM', authenticating: 'AUTHENTICATING', connecting: 'CONNECTING TO GOHMO', granted: 'ACCESS GRANTED', denied: 'TRY ACCESS AGAIN', offline: 'RECONNECT TO FARM', expired: 'SIGN IN AGAIN' }[phase.value]));
+const phaseStep = computed(() => ({ idle: 'SECURE ENTRY', authenticating: 'STEP 01 / VERIFY', connecting: 'STEP 02 / CONNECT', granted: 'IDENTITY CONFIRMED', denied: 'CREDENTIALS REJECTED', offline: 'CONNECTION REQUIRED', expired: 'SESSION ENDED' }[phase.value]));
 
 function lightImpact() { void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }
 function updateClock() { currentTime.value = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()); }
@@ -134,6 +134,7 @@ async function submit() {
 function handleOffline() { serverState.value = 'unavailable'; }
 function handleOnline() { void checkServer(); }
 onMounted(() => {
+  if (route.query.expired === '1') { phase.value = 'expired'; error.value = 'Please sign in again to continue.'; }
   updateClock();
   clockTimer = window.setInterval(updateClock, 30000);
   window.addEventListener('offline', handleOffline);

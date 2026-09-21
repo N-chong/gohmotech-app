@@ -22,15 +22,15 @@
 
         <template v-else-if="data">
           <section class="dashboard-section living-environment">
-            <div class="rich-section-heading"><div><p class="eyebrow">LIVE ENVIRONMENT</p><h2>One sensor surface</h2></div><span><i></i>{{ changedMetric ? 'Value changed' : 'Updating' }}</span></div>
-            <div class="environment-console" :class="{ changed: changedMetric === selectedEnvironment }">
+            <div class="rich-section-heading"><div><p class="eyebrow">{{ data.system.controller_online ? 'LIVE ENVIRONMENT' : 'LAST ENVIRONMENT READING' }}</p><h2>One sensor surface</h2></div><span :class="{ offline: !data.system.controller_online }"><i></i>{{ data.system.controller_online ? (changedMetric ? 'Value changed' : 'Live') : 'Device offline' }}</span></div>
+            <div class="environment-console" :class="{ changed: changedMetric === selectedEnvironment, stale: !data.system.controller_online }">
               <div class="environment-selector" role="tablist" aria-label="Environmental readings">
                 <button v-for="metric in environmentMetrics" :key="metric.key" type="button" role="tab" :aria-selected="selectedEnvironment === metric.key" :class="{ active: selectedEnvironment === metric.key }" @click="selectEnvironment(metric.key)"><ion-icon :icon="metric.icon" />{{ metric.label }}</button>
               </div>
               <div class="environment-reading">
                 <div class="environment-value"><small>{{ activeEnvironment.kicker }}</small><strong :key="`${activeEnvironment.key}-${activeEnvironment.value}`">{{ activeEnvironment.display }}</strong><span v-if="activeDelta">{{ activeDelta > 0 ? '+' : '' }}{{ activeDelta.toFixed(1) }}{{ activeEnvironment.suffix }}</span></div>
                 <div class="environment-visual" :style="{ '--level': `${activeEnvironment.level}%` }"><div class="sensor-track"><i></i><b></b></div><div><span>LOW</span><span>LIVE RANGE</span><span>HIGH</span></div></div>
-                <footer><span><i></i>{{ activeEnvironment.status }}</span><small>Updated {{ relativeTime(data.environment.updated_at) }}</small></footer>
+                <footer><span><i></i>{{ data.system.controller_online ? activeEnvironment.status : 'DEVICE OFFLINE · LAST READING' }}</span><small>Updated {{ relativeTime(data.environment.updated_at) }}</small></footer>
               </div>
               <div class="environment-context"><span><ion-icon :icon="waterOutline" /><small>HUMIDITY</small><strong>{{ value(data.environment.humidity, '%') }}</strong></span><span><ion-icon :icon="sunnyOutline" /><small>LIGHT</small><strong>{{ value(data.environment.light_level, '%') }}</strong></span><router-link to="/app/automation"><ion-icon :icon="nutritionOutline" /><small>FEED</small><strong>{{ value(data.feed.percentage, '%') }}</strong></router-link></div>
             </div>
@@ -43,7 +43,7 @@
               <router-link class="map-node map-controller" to="/app/automation" @click="lightImpact"><span :class="{ online: data.system.controller_online }"><ion-icon :icon="hardwareChipOutline" /></span><b>CONTROLLER</b><small>{{ data.system.controller_online ? 'ONLINE' : 'OFFLINE' }}</small></router-link>
               <router-link class="map-node map-camera" to="/app/live" @click="lightImpact"><span :class="{ online: data.system.cameras_online > 0 }"><ion-icon :icon="videocamOutline" /></span><b>CAMERAS</b><small>{{ data.system.cameras_online }}/{{ data.system.cameras_total }} ONLINE</small></router-link>
               <router-link class="map-node map-iot" to="/app/automation" @click="lightImpact"><span :class="{ online: data.system.iot_online > 0 }"><ion-icon :icon="wifiOutline" /></span><b>IOT NETWORK</b><small>{{ data.system.iot_online }}/{{ data.system.iot_total }} ONLINE</small></router-link>
-              <router-link class="map-node map-feed" to="/app/automation" @click="lightImpact"><span :class="{ online: !data.feed.is_low }"><ion-icon :icon="nutritionOutline" /></span><b>FEEDER</b><small>{{ data.feed.is_low ? 'LOW SUPPLY' : 'READY' }}</small></router-link>
+              <router-link class="map-node map-feed" to="/app/automation" @click="lightImpact"><span :class="{ online: deviceState.feeder.state === 'online' }"><ion-icon :icon="nutritionOutline" /></span><b>FEEDER</b><small>{{ deviceState.feeder.state === 'online' ? (data.feed.is_low ? 'LOW SUPPLY' : 'ONLINE') : deviceState.feeder.state.toUpperCase() }}</small></router-link>
               <button class="map-core" type="button" @click="openHealth"><i></i><img src="/gohmotech-logo.png" alt=""><strong>FARM CORE</strong><small>{{ data.system.online ? 'CONNECTED' : 'INTERRUPTED' }}</small></button>
             </div>
           </section>
@@ -71,6 +71,7 @@ import NetworkBanner from '@/components/NetworkBanner.vue';
 import StatePanel from '@/components/StatePanel.vue';
 import { dashboardService } from '@/services/dashboard.service';
 import { authState } from '@/stores/auth.store';
+import { applyDashboardStatus, deviceState } from '@/stores/device.store';
 import type { DashboardData } from '@/types/api';
 import { relativeTime, titleCase } from '@/utils/format';
 import { FarmSocket } from '@/services/websocket.service';
@@ -133,7 +134,7 @@ async function load() {
     loading.value = true; error.value = '';
     try {
       const next = await dashboardService.get(controller.signal);
-      if (!controller.signal.aborted) { captureChanges(data.value, next); data.value = next; }
+      if (!controller.signal.aborted) { captureChanges(data.value, next); data.value = next; applyDashboardStatus(next); }
     } catch (reason) {
       if (!controller.signal.aborted) error.value = reason instanceof Error ? reason.message : 'Unable to retrieve farm status.';
     } finally {

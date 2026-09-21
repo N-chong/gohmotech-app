@@ -1,5 +1,6 @@
 import { API_BASE, apiRequest } from './api';
 export class FarmSocket {
+  private static instances = new Set<FarmSocket>();
   private socket?: WebSocket;
   private connectPromise?: Promise<void>;
   private reconnectTimer?: number;
@@ -9,6 +10,7 @@ export class FarmSocket {
   constructor(private channel: 'sensors' | 'alerts' | 'feeding' | 'detections', private onMessage: (data: unknown) => void) {}
 
   connect(): Promise<void> {
+    FarmSocket.instances.add(this);
     this.stopped = false;
     if (this.reconnectTimer) { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = undefined; }
     if (this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) return Promise.resolve();
@@ -67,5 +69,10 @@ export class FarmSocket {
       socket.onclose = null;
       socket.close();
     }
+    FarmSocket.instances.delete(this);
   }
+
+  static closeAll() { for (const socket of [...FarmSocket.instances]) socket.close(); }
 }
+
+export function closeAuthenticatedSockets() { FarmSocket.closeAll(); }

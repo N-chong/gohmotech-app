@@ -33,8 +33,9 @@ const routes: RouteRecordRaw[] = [
 
 const router = createRouter({ history: createWebHistory(import.meta.env.BASE_URL), routes });
 router.beforeEach((to) => {
-  if (!to.meta.public && !authState.token) return { name: 'login', query: { redirect: to.fullPath } };
-  if (to.name === 'login' && authState.token) return { name: 'home' };
+  if (authState.status === 'bootstrapping' || authState.status === 'offline') return true;
+  if (!to.meta.public && authState.status !== 'authenticated') return { name: 'login', query: { redirect: to.fullPath } };
+  if (to.name === 'login' && authState.status === 'authenticated') return { name: 'home' };
   return true;
 });
 export default router;

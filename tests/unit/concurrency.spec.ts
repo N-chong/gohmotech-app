@@ -89,6 +89,40 @@ describe('central HTTP request deduplication', () => {
   });
 });
 
+describe('authentication recovery synchronization', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
+
+  test('uses one refresh request for simultaneous 401 responses and retries both calls once', async () => {
+    const refreshGate = deferred<void>();
+    let refreshCalls = 0;
+    const user = { id: 1, username: 'owner', email: '', display_name: 'Farm Owner', role: 'farm_owner' as const, permissions: { farm_access: true, manage_farm: true } };
+    const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/auth/login/')) return { ok: true, status: 200, json: async () => ({ token: 'old-access', refresh_token: 'refresh-token', user }) } as Response;
+      if (url.includes('/auth/refresh/')) {
+        refreshCalls += 1;
+        await refreshGate.promise;
+        return { ok: true, status: 200, json: async () => ({ token: 'new-access', refresh_token: 'refresh-token', user }) } as Response;
+      }
+      const authorization = new Headers(init?.headers).get('Authorization');
+      if (authorization === 'Token old-access') return { ok: false, status: 401, json: async () => ({ detail: 'Expired' }) } as Response;
+      return { ok: true, status: 200, json: async () => ({ ok: true }) } as Response;
+    });
+    vi.stubGlobal('fetch', request);
+    const { authService } = await import('@/services/auth.service');
+    const { apiRequest } = await import('@/services/api');
+    await authService.login('owner', 'password');
+
+    const first = apiRequest('/api/one/');
+    const second = apiRequest('/api/two/');
+    await vi.waitFor(() => expect(refreshCalls).toBe(1));
+    refreshGate.resolve();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([{ ok: true }, { ok: true }]);
+    expect(refreshCalls).toBe(1);
+  });
+});
+
 describe('WebSocket connection ownership', () => {
   class FakeWebSocket {
     static readonly CONNECTING = 0;

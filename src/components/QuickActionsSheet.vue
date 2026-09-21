@@ -6,9 +6,9 @@
   <ion-modal :is-open="open" :initial-breakpoint="0.54" :breakpoints="[0, 0.54, 0.82]" handle-behavior="cycle" @didDismiss="open = false">
     <ion-content class="quick-sheet-content">
       <section class="quick-sheet">
-        <header><div><small>GOHMO COMMAND LAYER</small><h2>Quick actions</h2></div><span><i></i>FARM CONNECTED</span></header>
+        <header><div><small>GOHMO COMMAND LAYER</small><h2>Quick actions</h2></div><span :class="deviceState.server.state"><i></i>{{ deviceState.server.state === 'online' ? 'FARM CONNECTED' : 'SERVER OFFLINE' }}</span></header>
         <div class="quick-action-grid">
-          <button v-for="action in actions" :key="action.path" type="button" :class="action.tone" @click="navigate(action.path)">
+          <button v-for="action in actions" :key="action.path" type="button" :class="[action.tone, { unavailable: action.unavailable }]" @click="navigate(action.path)">
             <span><ion-icon :icon="action.icon" /></span><strong>{{ action.label }}</strong><small>{{ action.copy }}</small><ion-icon :icon="arrowForwardOutline" />
           </button>
         </div>
@@ -25,11 +25,12 @@ import { IonContent, IonIcon, IonModal } from '@ionic/vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { addOutline, arrowForwardOutline, mapOutline, notificationsOutline, optionsOutline, pawOutline, shieldCheckmarkOutline, videocamOutline } from 'ionicons/icons';
 import { authState } from '@/stores/auth.store';
+import { deviceState } from '@/stores/device.store';
 
 const open = ref(false);
 const router = useRouter();
 const actions = computed(() => [
-  ...(authState.user?.permissions.manage_farm ? [{ label: 'Farm controls', copy: 'Door, light & feeding', path: '/app/automation', icon: optionsOutline, tone: 'green' }] : []),
+  ...(authState.user?.permissions.manage_farm ? [{ label: 'Farm controls', copy: deviceState.server.state === 'online' ? 'Check controller availability' : 'Unavailable — Server offline', path: '/app/automation', icon: optionsOutline, tone: 'green', unavailable: deviceState.server.state !== 'online' }] : []),
   { label: 'Live cameras', copy: 'Open monitoring', path: '/app/live', icon: videocamOutline, tone: 'blue' },
   { label: 'Find a goat', copy: 'BLE proximity', path: '/app/tracking', icon: mapOutline, tone: 'cyan' },
   { label: 'Goat inventory', copy: 'Profiles & weight', path: '/app/goats', icon: pawOutline, tone: 'forest' },
