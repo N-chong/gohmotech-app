@@ -129,6 +129,20 @@ describe('camera and automation service contracts', () => {
     await expect(automationService.control(actuator, 'feed')).rejects.toMatchObject({ code: 'DEVICE_OFFLINE' })
     expect(request).not.toHaveBeenCalled()
   })
+
+  test('keeps an otherwise-online actuator disabled when the farm server is offline', async () => {
+    const request = vi.fn()
+    vi.stubGlobal('fetch', request)
+    const { automationService } = await import('@/services/automation.service')
+    const { markServerOffline, markServerOnline, applyActuatorStatus } = await import('@/stores/device.store')
+    const actuator = { id: 9, device_name: 'Door', actuator_type: 'door' as const, current_state: 'closed', current_state_display: 'Closed', mode: 'manual', mode_display: 'Manual', last_changed_at: '', device_online: true }
+    markServerOnline()
+    applyActuatorStatus([actuator])
+    markServerOffline()
+
+    await expect(automationService.control(actuator, 'open')).rejects.toMatchObject({ code: 'DEVICE_OFFLINE' })
+    expect(request).not.toHaveBeenCalled()
+  })
 })
 
 describe('goat mobile API contract', () => {

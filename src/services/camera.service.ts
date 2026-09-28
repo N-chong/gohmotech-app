@@ -1,7 +1,7 @@
 import { API_BASE, apiRequest } from './api';
 import type { ApiPage, Camera } from '@/types/api';
 export const cameraService = {
-  list: () => apiRequest<ApiPage<Camera>>('/api/mobile/cameras/'),
+  list: (signal?: AbortSignal) => apiRequest<ApiPage<Camera>>('/api/mobile/cameras/', signal ? { signal } : {}),
   async streamUrl(cameraId: number, signal?: AbortSignal) {
     const { ticket } = await apiRequest<{ ticket: string }>('/api/mobile/auth/realtime-ticket/', { method: 'POST', body: JSON.stringify({ purpose: 'camera', camera_id: cameraId }), signal });
     return `${API_BASE}/api/mobile/cameras/${cameraId}/stream/?quality=55&fps=8&width=640&ticket=${encodeURIComponent(ticket)}`;

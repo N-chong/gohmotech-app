@@ -1,7 +1,7 @@
 <template>
   <ion-page class="surveillance-page">
     <ion-header class="ion-no-border surveillance-header"><ion-toolbar><ion-title>Live monitoring</ion-title><span slot="end" class="surveillance-clock">{{ currentTime }}</span></ion-toolbar></ion-header>
-    <ion-content><NetworkBanner /><main class="page-wrap surveillance-shell">
+    <ion-content><NetworkBanner :last-updated-at="lastUpdatedAt" :retry="load" :busy="loading" /><main class="page-wrap surveillance-shell">
       <section class="surveillance-intro"><div><p class="eyebrow">FARM SURVEILLANCE</p><h1>Eyes on the goat house.</h1><p>Swipe between secure, ticketed camera streams.</p></div><span class="camera-count"><b>{{ activeCount }}</b><small>ONLINE</small></span></section>
 
       <div v-if="cameras.length > 1" class="tactile-camera-rail" aria-label="Camera switcher" role="tablist">
@@ -51,8 +51,8 @@ import { cameraService } from '@/services/camera.service';
 import type { Camera } from '@/types/api';
 import { relativeTime, titleCase } from '@/utils/format';
 
-const cameras = ref<Camera[]>([]); const selected = ref<Camera>(); const streamUrl = ref(''); const loading = ref(true); const error = ref(''); const playing = ref(false); const now = ref(new Date());
-const controlsVisible = ref(false); const cameraInfoOpen = ref(false); const pointerX = ref(0); let controlsTimer: number | undefined; let clockTimer: number | undefined; let streamController: AbortController | undefined; let streamGeneration = 0; let pageActive = false;
+const cameras = ref<Camera[]>([]); const selected = ref<Camera>(); const streamUrl = ref(''); const loading = ref(true); const error = ref(''); const playing = ref(false); const now = ref(new Date()); const lastUpdatedAt = ref<string | null>(null);
+const controlsVisible = ref(false); const cameraInfoOpen = ref(false); const pointerX = ref(0); let controlsTimer: number | undefined; let clockTimer: number | undefined; let listController: AbortController | undefined; let streamController: AbortController | undefined; let streamGeneration = 0; let pageActive = false;
 const activeCount = computed(() => cameras.value.filter((camera) => camera.status === 'active').length);
 const currentTime = computed(() => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(now.value));
 function impact() { void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }
@@ -76,7 +76,23 @@ function pointerStart(event: PointerEvent) { pointerX.value = event.clientX; }
 function pointerEnd(event: PointerEvent) { const distance = event.clientX - pointerX.value; if (Math.abs(distance) > 55) { void switchCamera(distance < 0 ? 1 : -1); pointerX.value = event.clientX; } }
 function revealControls() { controlsVisible.value = !controlsVisible.value; impact(); if (controlsTimer) window.clearTimeout(controlsTimer); if (controlsVisible.value) controlsTimer = window.setTimeout(() => { controlsVisible.value = false; }, 5000); }
 function openCameraInfo() { cameraInfoOpen.value = true; controlsVisible.value = false; impact(); }
-async function load() { loading.value = true; error.value = ''; try { const result = await cameraService.list(); cameras.value = result.results; if (pageActive && cameras.value.length) await select(cameras.value[0]); } catch { if (pageActive) error.value = 'Unable to retrieve configured cameras.'; } finally { loading.value = false; } }
+async function load() {
+  listController?.abort();
+  const controller = new AbortController();
+  listController = controller;
+  loading.value = true; error.value = '';
+  try {
+    const result = await cameraService.list(controller.signal);
+    if (!pageActive || controller.signal.aborted) return;
+    cameras.value = result.results;
+    lastUpdatedAt.value = new Date().toISOString();
+    if (cameras.value.length) await select(cameras.value[0]);
+  } catch {
+    if (pageActive && !controller.signal.aborted) error.value = 'Unable to retrieve configured cameras.';
+  } finally {
+    if (listController === controller) { listController = undefined; loading.value = false; }
+  }
+}
 function streamFailed() { playing.value = false; error.value = 'The camera stream stopped.'; }
 async function fullscreen() { impact(); const stage = document.querySelector('.interactive-viewer') as HTMLElement | null; await stage?.requestFullscreen?.(); }
 function startPage() {
@@ -85,7 +101,7 @@ function startPage() {
   void load();
 }
 function stopPage() {
-  pageActive = false; streamGeneration += 1; streamController?.abort(); streamController = undefined;
+  pageActive = false; streamGeneration += 1; listController?.abort(); listController = undefined; streamController?.abort(); streamController = undefined;
   streamUrl.value = ''; playing.value = false; controlsVisible.value = false; cameraInfoOpen.value = false;
   if (clockTimer) window.clearInterval(clockTimer); clockTimer = undefined;
   if (controlsTimer) window.clearTimeout(controlsTimer); controlsTimer = undefined;

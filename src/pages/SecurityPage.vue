@@ -7,6 +7,7 @@
       </ion-toolbar>
     </ion-header>
     <ion-content>
+      <NetworkBanner :last-updated-at="lastUpdatedAt" :retry="retryConnection" :busy="loading" />
       <ion-refresher slot="fixed" @ionRefresh="refresh">
         <ion-refresher-content pulling-text="SYNC SECURITY" refreshing-text="Reviewing detections…" />
       </ion-refresher>
@@ -17,16 +18,17 @@
           <div>
             <p class="eyebrow">INTELLIGENT MONITORING</p>
             <h1>{{ events.length ? 'Farm activity monitored' : 'All clear' }}</h1>
-            <p>{{ events.length ? `${events.length} recent detection event${events.length === 1 ? '' : 's'} available for review.` : 'No recent security detections require review.' }}</p>
+            <p>{{ total ? `${total} recent detection event${total === 1 ? '' : 's'} available for review.` : 'No recent security detections require review.' }}</p>
           </div>
           <span class="security-live"><i></i>MONITORING</span>
         </section>
 
-        <StatePanel v-if="loading" loading title="Loading security events" message="Retrieving recent detections." />
-        <StatePanel v-else-if="error" tone="danger" title="Security events unavailable" :message="error" :retry="load" />
-        <template v-else>
+        <StatePanel v-if="loading && !events.length" loading title="Loading security events" message="Retrieving recent detections." />
+        <StatePanel v-else-if="error && !events.length" tone="danger" title="Security events unavailable" :message="error" :retry="reset" />
+        <div v-if="error && events.length" class="stale-data-notice" role="status"><ion-icon :icon="cloudOfflineOutline" /><div><strong>Showing previously loaded detections</strong><small>{{ error }}</small></div><button type="button" @click="retryConnection">Retry</button></div>
+        <template v-if="events.length || (!loading && !error)">
           <section class="security-kpis">
-            <div><strong>{{ events.length }}</strong><small>Recent events</small></div>
+            <div><strong>{{ total }}</strong><small>Recent events</small></div>
             <div><strong>{{ highConfidence }}</strong><small>High confidence</small></div>
             <div><strong>{{ reviewedCount }}</strong><small>Reviewed</small></div>
           </section>
@@ -34,7 +36,7 @@
           <section class="security-timeline">
             <div class="rich-section-heading">
               <div><p class="eyebrow">EVENT TIMELINE</p><h2>Recent activity</h2></div>
-              <span>{{ events.length }} events</span>
+              <span>{{ events.length }}/{{ total }} loaded</span>
             </div>
 
             <article v-for="item in events" :key="item.id" class="security-event-card" :class="{ expanded: expandedEventId === item.id }">
@@ -76,26 +78,33 @@
             </section>
           </section>
         </template>
+        <div v-if="loadMoreError" class="pagination-retry" role="alert"><span>{{ loadMoreError }}</span><button type="button" @click="loadMore">TRY AGAIN</button></div>
       </main>
+      <ion-infinite-scroll :disabled="!hasMore || Boolean(loadMoreError)" threshold="140px" @ionInfinite="loadNext"><ion-infinite-scroll-content loading-spinner="crescent" loading-text="Loading more detections…" /></ion-infinite-scroll>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar } from '@ionic/vue';
-import { cameraOutline, chevronDownOutline, chevronForwardOutline, personOutline, scanOutline, shieldCheckmarkOutline } from 'ionicons/icons';
+import { IonButtons, IonContent, IonHeader, IonIcon, IonInfiniteScroll, IonInfiniteScrollContent, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave } from '@ionic/vue';
+import { cameraOutline, chevronDownOutline, chevronForwardOutline, cloudOfflineOutline, personOutline, scanOutline, shieldCheckmarkOutline } from 'ionicons/icons';
 import AppBackButton from '@/components/AppBackButton.vue';
 import AuthImage from '@/components/AuthImage.vue';
+import NetworkBanner from '@/components/NetworkBanner.vue';
 import StatePanel from '@/components/StatePanel.vue';
+import { usePaginatedResource } from '@/composables/usePaginatedResource';
 import { securityService, type Detection } from '@/services/security.service';
 import { relativeTime, titleCase } from '@/utils/format';
 
-const events = ref<Detection[]>([]);
-const loading = ref(true);
-const error = ref('');
 const expandedEventId = ref<number>();
+const { items: events, count: total, loading, error, loadMoreError, lastUpdatedAt, hasLoaded, hasMore, activate, deactivate, reset, refresh: refreshPage, loadMore } = usePaginatedResource<Detection>({
+  fetchPage: (page, signal) => securityService.list(page, signal),
+  getKey: (item) => item.id,
+  initialErrorMessage: 'Recent detection events could not be retrieved.',
+  moreErrorMessage: 'More detections could not be loaded. Previously loaded events are still available.',
+});
 const highConfidence = computed(() => events.value.filter((item) => item.confidence >= 0.8).length);
 const reviewedCount = computed(() => events.value.filter((item) => item.review_state === 'reviewed').length);
 const confidencePercent = (value: number) => Math.min(100, Math.max(0, Math.round(value * 100)));
@@ -106,22 +115,13 @@ function toggleEvent(id: number) {
   void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined);
 }
 
-async function load() {
-  loading.value = true;
-  error.value = '';
-  try {
-    events.value = (await securityService.list()).results;
-  } catch {
-    error.value = 'Recent detection events could not be retrieved.';
-  } finally {
-    loading.value = false;
-  }
-}
-
 async function refresh(event: CustomEvent) {
-  await load();
+  await refreshPage();
   (event.target as HTMLIonRefresherElement).complete();
 }
-
-onMounted(load);
+async function retryConnection() { await (events.value.length ? refreshPage() : reset()); }
+async function loadNext(event: CustomEvent) { await loadMore(); await (event.target as HTMLIonInfiniteScrollElement).complete(); }
+function startPage() { activate(); if (!hasLoaded.value) void reset(); }
+function stopPage() { deactivate(); }
+onIonViewDidEnter(startPage); onIonViewDidLeave(stopPage); onBeforeUnmount(stopPage);
 </script>

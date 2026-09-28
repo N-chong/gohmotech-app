@@ -2,7 +2,7 @@
   <ion-page>
     <ion-header class="ion-no-border home-header"><ion-toolbar><ion-title><span class="home-brand"><span><img src="/gohmotech-logo.png" alt=""></span><b>GoHMoTech</b></span></ion-title><ion-button class="header-alert-button" slot="end" fill="clear" aria-label="Open farm alerts" router-link="/app/alerts"><ion-icon :icon="notificationsOutline" /><i v-if="data?.alerts.length" aria-hidden="true"></i></ion-button></ion-toolbar></ion-header>
     <ion-content>
-      <NetworkBanner />
+      <NetworkBanner :last-updated-at="data?.generated_at" :retry="load" :busy="loading" />
       <ion-refresher slot="fixed" @ionRefresh="refresh"><ion-refresher-content pulling-text="SYNC FARM" refreshing-text="Synchronizing farm…" /></ion-refresher>
       <main class="page-wrap home-dashboard">
         <section class="farm-command-hero" :class="{ degraded: data && !data.system.online }">

@@ -2,6 +2,7 @@
   <ion-page class="alerts-page">
     <ion-header class="ion-no-border"><ion-toolbar><ion-title>Alerts</ion-title></ion-toolbar></ion-header>
     <ion-content>
+      <NetworkBanner :last-updated-at="lastUpdatedAt" :retry="retryConnection" :busy="loading" />
       <ion-refresher slot="fixed" @ionRefresh="refresh"><ion-refresher-content pulling-text="SYNC FARM" refreshing-text="Synchronizing alerts…" /></ion-refresher>
       <main class="page-wrap alerts-shell">
         <section class="alerts-hero">
@@ -13,15 +14,16 @@
           <button v-for="item in filters" :key="item" type="button" :class="{ active: filter === item }" @click="selectFilter(item)">{{ titleCase(item) }}<span>{{ filterCount(item) }}</span></button>
         </div>
 
-        <StatePanel v-if="loading" loading title="Loading alerts" message="Checking recent farm events." />
-        <StatePanel v-else-if="error" tone="danger" title="Unable to retrieve alerts" :message="error" :retry="load" />
-        <section v-else-if="!visible.length" class="alerts-empty-state">
+        <StatePanel v-if="loading && !alerts.length" loading title="Loading alerts" message="Checking recent farm events." />
+        <StatePanel v-else-if="error && !alerts.length" tone="danger" title="Unable to retrieve alerts" :message="error" :retry="reset" />
+        <div v-if="error && alerts.length" class="stale-data-notice" role="status"><ion-icon :icon="warningOutline" /><div><strong>Showing previously loaded alerts</strong><small>{{ error }}</small></div><button type="button" @click="retryConnection">Retry</button></div>
+        <section v-if="!loading && (!error || alerts.length) && !visible.length" class="alerts-empty-state">
           <span><ion-icon :icon="checkmarkCircleOutline" /></span>
           <div><strong>No {{ filter === 'all' ? 'active' : filter }} alerts</strong><p>Everything looks good in this notification category.</p></div>
           <button v-if="filter !== 'all'" type="button" @click="selectFilter('all')">Show all activity</button>
         </section>
 
-        <section v-else class="rich-alert-list">
+        <section v-else-if="visible.length" class="rich-alert-list">
           <article v-for="item in visible" :key="item.id" :class="[severityClass(item), { unread: !item.is_read, expanded: expandedAlertId === item.id }]">
             <button class="alert-summary" type="button" :aria-expanded="expandedAlertId === item.id" @click="toggleAlert(item)">
               <span class="alert-icon"><ion-icon :icon="severityIcon(item)" /></span>
@@ -48,28 +50,36 @@
             </div>
           </article>
         </section>
+        <div v-if="loadMoreError" class="pagination-retry" role="alert"><span>{{ loadMoreError }}</span><button type="button" @click="loadMore">TRY AGAIN</button></div>
       </main>
+      <ion-infinite-scroll :disabled="!hasMore || Boolean(loadMoreError)" threshold="140px" @ionInfinite="loadNext"><ion-infinite-scroll-content loading-spinner="crescent" loading-text="Loading more alerts…" /></ion-infinite-scroll>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { IonContent, IonHeader, IonIcon, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar } from '@ionic/vue';
+import { IonContent, IonHeader, IonIcon, IonInfiniteScroll, IonInfiniteScrollContent, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave } from '@ionic/vue';
 import { alertCircleOutline, checkmarkCircleOutline, chevronDownOutline, informationCircleOutline, radioOutline, warningOutline } from 'ionicons/icons';
+import NetworkBanner from '@/components/NetworkBanner.vue';
 import StatePanel from '@/components/StatePanel.vue';
+import { usePaginatedResource } from '@/composables/usePaginatedResource';
 import { alertService } from '@/services/alert.service';
 import type { Notification } from '@/types/api';
 import { relativeTime, titleCase } from '@/utils/format';
 
-const alerts = ref<Notification[]>([]);
 const filters = ['all', 'critical', 'warning', 'information'];
 const filter = ref('all');
-const loading = ref(true);
-const error = ref('');
 const expandedAlertId = ref<number>();
 const markingId = ref<number>();
+let markController: AbortController | undefined;
+const { items: alerts, loading, error, loadMoreError, lastUpdatedAt, hasLoaded, hasMore, activate, deactivate, reset, refresh: refreshPage, loadMore } = usePaginatedResource<Notification>({
+  fetchPage: (page, signal) => alertService.list(page, signal),
+  getKey: (item) => item.id,
+  initialErrorMessage: 'Farm notifications could not be retrieved.',
+  moreErrorMessage: 'More notifications could not be loaded. Previously loaded alerts are still available.',
+});
 const category = (item: Notification) => ['critical', 'high'].includes(item.severity) ? 'critical' : ['medium', 'low'].includes(item.severity) ? 'warning' : 'information';
 const visible = computed(() => alerts.value.filter((item) => filter.value === 'all' || category(item) === filter.value));
 const unreadCount = computed(() => alerts.value.filter((item) => !item.is_read).length);
@@ -79,9 +89,11 @@ const severityIcon = (item: Notification) => category(item) === 'critical' ? ale
 const exactTime = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
 function selectFilter(value: string) {
+  if (filter.value === value) return;
   filter.value = value;
   expandedAlertId.value = undefined;
   void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined);
+  void reset();
 }
 
 function toggleAlert(item: Notification) {
@@ -92,32 +104,33 @@ function toggleAlert(item: Notification) {
 async function markRead(item: Notification) {
   if (item.is_read || markingId.value) return;
   markingId.value = item.id;
+  const controller = new AbortController();
+  markController = controller;
   try {
-    Object.assign(item, await alertService.markRead(item.id));
-    void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
+    const updated = await alertService.markRead(item.id, controller.signal);
+    if (!controller.signal.aborted) {
+      Object.assign(item, updated);
+      void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
+    }
   } catch {
     // Keep the expanded alert usable if the acknowledgement request fails.
   } finally {
-    markingId.value = undefined;
-  }
-}
-
-async function load() {
-  loading.value = true;
-  error.value = '';
-  try {
-    alerts.value = (await alertService.list()).results;
-  } catch {
-    error.value = 'Farm notifications could not be retrieved.';
-  } finally {
-    loading.value = false;
+    if (markController === controller) { markController = undefined; markingId.value = undefined; }
   }
 }
 
 async function refresh(event: CustomEvent) {
-  await load();
+  await refreshPage();
   (event.target as HTMLIonRefresherElement).complete();
 }
-
-onMounted(load);
+async function retryConnection() { await (alerts.value.length ? refreshPage() : reset()); }
+async function loadNext(event: CustomEvent) { await loadMore(); await (event.target as HTMLIonInfiniteScrollElement).complete(); }
+function startPage() { activate(); if (!hasLoaded.value) void reset(); }
+function stopPage() {
+  deactivate();
+  markController?.abort();
+  markController = undefined;
+  markingId.value = undefined;
+}
+onIonViewDidEnter(startPage); onIonViewDidLeave(stopPage); onBeforeUnmount(stopPage);
 </script>

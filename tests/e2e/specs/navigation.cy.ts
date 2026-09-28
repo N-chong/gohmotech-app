@@ -31,13 +31,15 @@ describe('Ionic back navigation', () => {
       },
     })
 
-    cy.contains('h1', 'Farm Owner').should('be.visible')
+    cy.contains('.more-page:not(.ion-page-hidden) h1', 'Farm Owner').should('exist')
     cy.get('.hub-focus-action a').click()
     cy.location('pathname').should('eq', '/app/automation')
-    cy.contains('h1', 'Physical systems.').should('be.visible')
+    cy.contains('.automation-page:not(.ion-page-hidden) h1', 'Physical systems.').should('exist')
 
+    cy.get('ion-button.app-back-button').should('be.visible')
+    cy.wait(250)
     cy.get('ion-button.app-back-button').click()
     cy.location('pathname').should('eq', '/app/more')
-    cy.contains('h1', 'Farm Owner').should('be.visible')
+    cy.contains('.more-page:not(.ion-page-hidden) h1', 'Farm Owner').should('exist')
   })
 })

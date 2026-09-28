@@ -1,7 +1,7 @@
 <template>
   <ion-page class="automation-page">
     <ion-header class="ion-no-border automation-header"><ion-toolbar><ion-buttons slot="start"><AppBackButton fallback="/app/more" /></ion-buttons><ion-title>Automation</ion-title></ion-toolbar></ion-header>
-    <ion-content><main class="page-wrap automation-shell">
+    <ion-content><NetworkBanner :last-updated-at="lastUpdatedAt" :retry="load" :busy="loading" /><main class="page-wrap automation-shell">
       <section class="automation-hero"><div class="automation-circuit" aria-hidden="true"></div><span class="automation-hero-icon"><ion-icon :icon="flashOutline" /></span><div><p class="eyebrow">SMART CONTROL CENTER</p><h1>Physical systems.<br><span>Visible intent.</span></h1><p>{{ actuators.length }} configured device{{ actuators.length === 1 ? '' : 's' }} · {{ canManage ? 'Protected controls enabled' : 'Read-only access' }}</p></div></section>
       <section v-if="actuators.length" class="automation-status-rail" :class="deviceState.server.state"><div><i></i><span><small>SERVER LINK</small><strong>{{ deviceState.server.state.toUpperCase() }}</strong></span></div><div><small>CONTROLLERS</small><strong>{{ onlineCount }}/{{ actuators.length }} ONLINE</strong></div><div><small>ACCESS</small><strong>{{ canManage ? 'CONTROL' : 'VIEW' }}</strong></div></section>
 
@@ -48,6 +48,7 @@ import { alertController, IonButton, IonButtons, IonContent, IonHeader, IonIcon,
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { alertCircleOutline, arrowForwardOutline, bulbOutline, chevronForwardOutline, cloudOfflineOutline, flashOutline, informationCircleOutline, lockClosedOutline, lockOpenOutline, moonOutline, nutritionOutline, sunnyOutline, sparklesOutline } from 'ionicons/icons';
 import AppBackButton from '@/components/AppBackButton.vue';
+import NetworkBanner from '@/components/NetworkBanner.vue';
 import StatePanel from '@/components/StatePanel.vue';
 import { automationService, DeviceUnavailableError, type Actuator } from '@/services/automation.service';
 import { dashboardService } from '@/services/dashboard.service';
@@ -57,7 +58,8 @@ import { actuatorConnectivity, applyDashboardStatus, canControlActuator, deviceS
 import { relativeTime, titleCase } from '@/utils/format';
 import { authState } from '@/stores/auth.store';
 
-const actuators = ref<Actuator[]>([]); const loading = ref(true); const error = ref(''); const busy = ref<number>(); const pendingState = ref(''); const detailItem = ref<Actuator>();
+const actuators = ref<Actuator[]>([]); const loading = ref(true); const error = ref(''); const busy = ref<number>(); const pendingState = ref(''); const detailItem = ref<Actuator>(); const lastUpdatedAt = ref<string | null>(null);
+let loadController: AbortController | undefined; let pageActive = false;
 const canManage = computed(() => Boolean(authState.user?.permissions.manage_farm));
 const onlineCount = computed(() => actuators.value.filter(canControlActuator).length);
 const connectivity = (item: Actuator) => actuatorConnectivity(item);
@@ -73,8 +75,28 @@ const deviceIcon = (item: Actuator) => item.actuator_type === 'door' ? lockOpenO
 function stateLabel(item: Actuator) { if (busy.value === item.id) return item.actuator_type === 'door' ? (pendingState.value === 'open' ? 'Opening…' : 'Closing…') : (pendingState.value === 'on' ? 'Turning on…' : 'Turning off…'); return item.current_state_display || titleCase(item.current_state); }
 function deviceCopy(item: Actuator) { if (!canControl(item)) return unavailableCopy(item); if (busy.value === item.id) return 'Command acknowledged. Waiting for the controller response.'; if (item.actuator_type === 'door') return isActive(item) ? 'Entry access is currently open.' : 'The goat house is secured.'; if (item.actuator_type === 'light') return isActive(item) ? 'Farm lighting is illuminating the area.' : item.mode.toLowerCase().includes('auto') ? 'Automatic lighting rules remain active.' : 'Lighting is currently conserving power.'; return 'State and mode are synchronized with the feeder controller.'; }
 function openDetails(item: Actuator) { detailItem.value = item; void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }
-async function load() { loading.value = true; error.value = ''; try { const [list, dashboard] = await Promise.all([automationService.list(), dashboardService.get()]); actuators.value = list.results; applyDashboardStatus(dashboard); } catch { error.value = 'The automation controller could not be reached. Controls are unavailable until connectivity is confirmed.'; } finally { loading.value = false; } }
-async function refreshStates() { try { const [list, dashboard] = await Promise.all([automationService.list(), dashboardService.get()]); actuators.value = list.results; applyDashboardStatus(dashboard); } catch { /* retain the last confirmed state but controls fail closed through server status */ } }
+async function syncStates(showLoading: boolean) {
+  loadController?.abort();
+  const controller = new AbortController();
+  loadController = controller;
+  if (showLoading) { loading.value = true; error.value = ''; }
+  try {
+    const [list, dashboard] = await Promise.all([automationService.list(controller.signal), dashboardService.get(controller.signal)]);
+    if (!pageActive || controller.signal.aborted) return;
+    actuators.value = list.results;
+    applyDashboardStatus(dashboard);
+    lastUpdatedAt.value = new Date().toISOString();
+  } catch {
+    if (pageActive && !controller.signal.aborted && showLoading) error.value = 'The automation controller could not be reached. Controls are unavailable until connectivity is confirmed.';
+  } finally {
+    if (loadController === controller) {
+      loadController = undefined;
+      loading.value = false;
+    }
+  }
+}
+async function load() { await syncStates(true); }
+async function refreshStates() { await syncStates(false); }
 async function confirmControl(item: Actuator, state: string) {
   if (!canControl(item)) { error.value = unavailableCopy(item); return; }
   const action = state === 'open' ? 'Open' : state === 'closed' ? 'Close' : state === 'on' ? 'Turn on' : 'Turn off';
@@ -94,7 +116,7 @@ async function confirmControl(item: Actuator, state: string) {
 }
 const refreshScheduler = new RefreshScheduler(refreshStates, 3_000);
 const socket = new FarmSocket('sensors', () => refreshScheduler.notify());
-function startPage() { void load(); void refreshScheduler.start(false); void socket.connect().catch(() => undefined); }
-function stopPage() { refreshScheduler.stop(); socket.close(); busy.value = undefined; pendingState.value = ''; }
+function startPage() { pageActive = true; void load(); void refreshScheduler.start(false); void socket.connect().catch(() => undefined); }
+function stopPage() { pageActive = false; refreshScheduler.stop(); socket.close(); loadController?.abort(); loadController = undefined; loading.value = false; busy.value = undefined; pendingState.value = ''; }
 onIonViewDidEnter(startPage); onIonViewDidLeave(stopPage); onBeforeUnmount(stopPage);
 </script>

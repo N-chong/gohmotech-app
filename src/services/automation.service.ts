@@ -28,8 +28,8 @@ export class DeviceUnavailableError extends Error {
 }
 
 export const automationService = {
-  async list() {
-    const response = await apiRequest<{ count: number; results: Actuator[] }>('/iot/api/actuators/');
+  async list(signal?: AbortSignal) {
+    const response = await apiRequest<{ count: number; results: Actuator[] }>('/iot/api/actuators/', signal ? { signal } : {});
     applyActuatorStatus(response.results);
     return response;
   },
