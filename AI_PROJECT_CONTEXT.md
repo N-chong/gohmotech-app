@@ -47,7 +47,7 @@ This repository is the **frontend/mobile client only**. The backend, IoT control
 | End-to-end tests | Cypress |
 | Styling | Ionic CSS plus project-wide CSS variables and `src/theme/app.css` |
 
-Current package version: `1.5.0`. Android uses version name `1.5`, version code `15`, minimum SDK 24, compile/target SDK 36, Android Gradle Plugin 8.13.0, and Gradle 8.14.3.
+Current package version: `1.5.0`. The next Android release uses version name `1.6`, version code `16`, minimum SDK 24, compile/target SDK 36, Android Gradle Plugin 8.13.0, and Gradle 8.14.3.
 
 There is no Pinia/Vuex store. Shared state is implemented with Vue `reactive` objects exposed through `readonly` wrappers.
 
@@ -102,6 +102,7 @@ Important architectural properties:
 │   ├── unit/                      # Contracts, auth, concurrency, and utilities
 │   └── e2e/                       # Cypress navigation coverage
 ├── android/                       # Generated/customized Capacitor Android project
+├── docs/android-release.md        # Permanent signing, versioning, build, and update verification
 ├── public/                        # Logo and favicon assets
 ├── capacitor.config.ts            # App ID/name and `dist` web directory
 ├── vite.config.ts                 # Vue, aliases, test config, and dev proxies
@@ -295,6 +296,12 @@ Pop-Location
 ```
 
 The Android app packages the contents of `dist`. Do not assume a web build automatically updates the native project; run the Capacitor sync step.
+
+Production release signing is configured through ignored local
+`android/signing.properties` values (or private Gradle properties). Release
+builds fail when the permanent signing key is unavailable and never fall back
+to debug signing. See `docs/android-release.md` before building or distributing
+an APK.
 
 ## 13. Existing test coverage
 

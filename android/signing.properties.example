@@ -1,0 +1,6 @@
+# Copy this file to android/signing.properties and fill in the values locally.
+# android/signing.properties and keystore files are excluded from Git.
+GOHMOTECH_KEYSTORE_PATH=
+GOHMOTECH_KEYSTORE_PASSWORD=
+GOHMOTECH_KEY_ALIAS=
+GOHMOTECH_KEY_PASSWORD=

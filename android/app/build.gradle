@@ -1,5 +1,30 @@
 apply plugin: 'com.android.application'
 
+def gohMoTechSigningPropertiesFile = rootProject.file('signing.properties')
+def gohMoTechSigningProperties = new Properties()
+if (gohMoTechSigningPropertiesFile.isFile()) {
+    gohMoTechSigningPropertiesFile.withInputStream { stream ->
+        gohMoTechSigningProperties.load(stream)
+    }
+}
+
+def gohMoTechSigningKeys = [
+    'GOHMOTECH_KEYSTORE_PATH',
+    'GOHMOTECH_KEYSTORE_PASSWORD',
+    'GOHMOTECH_KEY_ALIAS',
+    'GOHMOTECH_KEY_PASSWORD'
+]
+def gohMoTechSigningValues = gohMoTechSigningKeys.collectEntries { key ->
+    def value = project.findProperty(key)?.toString()?.trim()
+    if (!value) {
+        value = gohMoTechSigningProperties.getProperty(key)?.trim()
+    }
+    [(key): value]
+}
+def gohMoTechMissingSigningKeys = gohMoTechSigningKeys.findAll { !gohMoTechSigningValues[it] }
+def gohMoTechReleaseKeystore = gohMoTechSigningValues.GOHMOTECH_KEYSTORE_PATH ?
+    rootProject.file(gohMoTechSigningValues.GOHMOTECH_KEYSTORE_PATH) : null
+
 android {
     namespace = "com.gohmotech.owner"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +32,8 @@ android {
         applicationId "com.gohmotech.owner"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 15
-        versionName "1.5"
+        versionCode 16
+        versionName "1.6"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,11 +41,55 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (gohMoTechMissingSigningKeys.isEmpty()) {
+            release {
+                storeFile gohMoTechReleaseKeystore
+                storePassword gohMoTechSigningValues.GOHMOTECH_KEYSTORE_PASSWORD
+                keyAlias gohMoTechSigningValues.GOHMOTECH_KEY_ALIAS
+                keyPassword gohMoTechSigningValues.GOHMOTECH_KEY_PASSWORD
+            }
+        }
+    }
     buildTypes {
         release {
+            if (gohMoTechMissingSigningKeys.isEmpty()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+    applicationVariants.all { variant ->
+        if (variant.buildType.name == 'release') {
+            variant.outputs.all {
+                outputFileName = "GoHMoTech-${variant.versionName}-release.apk"
+            }
+        }
+    }
+}
+
+def validateGohMoTechReleaseSigning = tasks.register('validateGohMoTechReleaseSigning') {
+    group = 'verification'
+    description = 'Fails release builds unless the permanent GoHMoTech signing key is configured.'
+    doLast {
+        if (!gohMoTechMissingSigningKeys.isEmpty()) {
+            throw new GradleException(
+                "GoHMoTech release signing is not configured. Copy signing.properties.example " +
+                "to signing.properties and define: ${gohMoTechMissingSigningKeys.join(', ')}."
+            )
+        }
+        if (!gohMoTechReleaseKeystore?.isFile()) {
+            throw new GradleException(
+                'The configured GoHMoTech release keystore does not exist or is not a file.'
+            )
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name == 'preReleaseBuild') {
+        task.dependsOn(validateGohMoTechReleaseSigning)
     }
 }
 

@@ -30,3 +30,9 @@ npm-debug.log*
 /platforms
 /plugins
 /www
+
+# Android release signing secrets
+*.jks
+*.keystore
+*.p12
+/android/signing.properties
