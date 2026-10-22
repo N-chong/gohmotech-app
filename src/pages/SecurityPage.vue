@@ -95,18 +95,19 @@ import AuthImage from '@/components/AuthImage.vue';
 import NetworkBanner from '@/components/NetworkBanner.vue';
 import StatePanel from '@/components/StatePanel.vue';
 import { usePaginatedResource } from '@/composables/usePaginatedResource';
-import { securityService, type Detection } from '@/services/security.service';
+import { securityService, type Detection, type DetectionPage } from '@/services/security.service';
 import { relativeTime, titleCase } from '@/utils/format';
 
 const expandedEventId = ref<number>();
-const { items: events, count: total, loading, error, loadMoreError, lastUpdatedAt, hasLoaded, hasMore, activate, deactivate, reset, refresh: refreshPage, loadMore } = usePaginatedResource<Detection>({
+const { items: events, pageData, count: total, loading, error, loadMoreError, lastUpdatedAt, hasLoaded, hasMore, activate, deactivate, reset, refresh: refreshPage, loadMore } = usePaginatedResource<Detection>({
   fetchPage: (page, signal) => securityService.list(page, signal),
   getKey: (item) => item.id,
   initialErrorMessage: 'Recent detection events could not be retrieved.',
   moreErrorMessage: 'More detections could not be loaded. Previously loaded events are still available.',
 });
-const highConfidence = computed(() => events.value.filter((item) => item.confidence >= 0.8).length);
-const reviewedCount = computed(() => events.value.filter((item) => item.review_state === 'reviewed').length);
+const securitySummary = computed(() => (pageData.value as DetectionPage | null)?.summary);
+const highConfidence = computed(() => securitySummary.value?.high_confidence ?? events.value.filter((item) => item.confidence >= 0.8).length);
+const reviewedCount = computed(() => securitySummary.value?.reviewed ?? events.value.filter((item) => item.review_state === 'reviewed').length);
 const confidencePercent = (value: number) => Math.min(100, Math.max(0, Math.round(value * 100)));
 const exactTime = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 

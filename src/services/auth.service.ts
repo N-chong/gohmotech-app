@@ -55,7 +55,7 @@ export const authService = {
       restoreSession(saved);
       markServerConnecting();
       try {
-        await apiRequest('/api/mobile/dashboard/', { retryAuth: true });
+        await apiRequest('/api/mobile/auth/me/', { retryAuth: true });
         if (authState.token) {
           setAuthStatus('authenticated');
           await persistSession({ token: authState.token, refreshToken: authState.refreshToken, user: authState.user! });

@@ -20,6 +20,7 @@ function pageFromNext(next: string | null, currentPage: number): number | null {
 
 export function usePaginatedResource<T>(options: PaginatedResourceOptions<T>) {
   const items = ref<T[]>([]) as Ref<T[]>;
+  const pageData = ref<ApiPage<T> | null>(null) as Ref<ApiPage<T> | null>;
   const count = ref(0);
   const next = ref<string | null>(null);
   const previous = ref<string | null>(null);
@@ -69,6 +70,7 @@ export function usePaginatedResource<T>(options: PaginatedResourceOptions<T>) {
     loadMoreError.value = '';
     if (!preserveExisting) {
       items.value = [];
+      pageData.value = null;
       count.value = 0;
       next.value = null;
       previous.value = null;
@@ -83,6 +85,7 @@ export function usePaginatedResource<T>(options: PaginatedResourceOptions<T>) {
         const unique = new Map<string | number, T>();
         for (const item of page.results) unique.set(options.getKey(item), item);
         items.value = [...unique.values()];
+        pageData.value = page;
         count.value = page.count;
         next.value = page.next;
         previous.value = page.previous;
@@ -146,6 +149,7 @@ export function usePaginatedResource<T>(options: PaginatedResourceOptions<T>) {
           return true;
         });
         items.value = [...items.value, ...appended];
+        pageData.value = page;
         count.value = page.count;
         next.value = page.next;
         previous.value = page.previous;
@@ -176,6 +180,7 @@ export function usePaginatedResource<T>(options: PaginatedResourceOptions<T>) {
 
   return {
     items,
+    pageData,
     count,
     next,
     previous,

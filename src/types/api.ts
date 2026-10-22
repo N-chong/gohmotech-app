@@ -1,9 +1,9 @@
 export interface ApiPage<T> { count: number; next: string | null; previous: string | null; results: T[] }
-export interface MobileUser { id: number; username: string; email: string; display_name: string; role: 'admin' | 'farm_owner' | 'farm_operator'; permissions: { farm_access: boolean; manage_farm: boolean } }
+export interface MobileUser { id: number; username: string; email: string; display_name: string; role: 'admin' | 'farm_owner'; permissions: { farm_access: boolean; manage_farm: boolean; marketplace_access: boolean } }
 export interface DashboardData {
   generated_at: string;
   system: { online: boolean; controller_online: boolean; controller_last_seen: string | null; iot_online: number; iot_total: number; cameras_online: number; cameras_total: number };
-  environment: { temperature: number | null; humidity: number | null; light_level: number | null; updated_at: string | null };
+  environment: { temperature: number | null; humidity: number | null; light_level: number | null; online: boolean; last_seen: string | null; updated_at: string | null };
   feed: { percentage: number | null; is_low: boolean | null; updated_at: string | null };
   goats: { registered: number }; automation: { door: ActuatorSummary | null; light: ActuatorSummary | null }; alerts: AlertSummary[];
 }

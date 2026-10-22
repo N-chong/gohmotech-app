@@ -36,7 +36,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { IonContent, IonHeader, IonIcon, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar } from '@ionic/vue';
-import { barChartOutline, chevronForwardOutline, cloudOfflineOutline, hardwareChipOutline, leafOutline, lockClosedOutline, logOutOutline, mapOutline, notificationsOutline, optionsOutline, radioOutline, shieldCheckmarkOutline, storefrontOutline } from 'ionicons/icons';
+import { barChartOutline, chevronForwardOutline, cloudOfflineOutline, hardwareChipOutline, leafOutline, lockClosedOutline, logOutOutline, mapOutline, notificationsOutline, nutritionOutline, optionsOutline, radioOutline, shieldCheckmarkOutline, storefrontOutline } from 'ionicons/icons';
 import { authState } from '@/stores/auth.store';
 import { authService } from '@/services/auth.service';
 import { alertService } from '@/services/alert.service';
@@ -55,6 +55,7 @@ const detectedGoats = computed(() => tracking.value?.goats.filter((item) => item
 const unreadAlerts = computed(() => alerts.value.filter((item) => !item.is_read).length);
 const groups = computed(() => [
   { eyebrow: 'FARM MANAGEMENT', title: 'Operate & understand', items: [
+    { path: '/app/feeding', title: 'Feeding', copy: 'Supply, schedules, and feed history', context: dashboard.value?.feed.percentage != null ? Math.round(dashboard.value.feed.percentage) + '% feed remaining' : '', icon: nutritionOutline, color: 'gold' },
     { path: '/app/automation', title: 'Automation', copy: 'Door, lighting, and feeding', context: dashboard.value ? `Door ${titleCase(dashboard.value.automation.door?.state || 'unknown')} · Light ${titleCase(dashboard.value.automation.light?.state || 'unknown')}` : '', icon: optionsOutline, color: 'green' },
     { path: '/app/tracking', title: 'Goat tracking', copy: 'BLE proximity and last seen', context: tracking.value ? `${detectedGoats.value}/${tracking.value.goats.length} tags currently detected` : '', icon: mapOutline, color: 'blue' },
     { path: '/app/reports', title: 'Farm intelligence', copy: 'Current operational snapshot', context: dashboard.value ? `${dashboard.value.system.iot_online}/${dashboard.value.system.iot_total} IoT devices online` : '', icon: barChartOutline, color: 'cyan' },
@@ -63,7 +64,7 @@ const groups = computed(() => [
     { path: '/app/security', title: 'Security center', copy: 'Detections and event details', context: unreadAlerts.value ? `${unreadAlerts.value} unread alert${unreadAlerts.value === 1 ? '' : 's'}` : 'No unread notifications', icon: lockClosedOutline, color: 'navy' },
   ] },
   { eyebrow: 'MARKETPLACE', title: 'Trade & connect', items: [
-    { path: '/app/marketplace', title: 'Marketplace', copy: 'Livestock commerce workspace', context: 'Mobile API integration pending', icon: storefrontOutline, color: 'gold' },
+    { path: '/app/marketplace', title: 'Marketplace', copy: 'Verified livestock listings', context: 'Live marketplace catalog', icon: storefrontOutline, color: 'gold' },
   ] },
 ]);
 

@@ -41,6 +41,7 @@ describe('paginated resource loading', () => {
 
     expect(loader.items.value).toEqual([{ id: 1, label: 'Updated one' }]);
     expect(loader.count.value).toBe(4);
+    expect(loader.pageData.value?.results).toHaveLength(2);
     expect(loader.next.value).toBe('/api/items/?page=2');
     expect(loader.previous.value).toBe('/api/items/?page=0');
     expect(loader.hasMore.value).toBe(true);

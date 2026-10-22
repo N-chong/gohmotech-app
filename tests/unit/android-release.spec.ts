@@ -13,8 +13,8 @@ describe('Android production release configuration', () => {
     expect(capacitorConfig).toContain("appId: 'com.gohmotech.owner'");
     expect(buildGradle).toContain('namespace = "com.gohmotech.owner"');
     expect(buildGradle).toContain('applicationId "com.gohmotech.owner"');
-    expect(buildGradle).toContain('versionCode 16');
-    expect(buildGradle).toContain('versionName "1.6"');
+    expect(buildGradle).toContain('versionCode 21');
+    expect(buildGradle).toContain('versionName "2.1"');
   });
 
   it('requires explicit release credentials and never configures debug signing for release', () => {

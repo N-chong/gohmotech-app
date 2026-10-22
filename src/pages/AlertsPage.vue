@@ -1,136 +1,167 @@
 <template>
   <ion-page class="alerts-page">
-    <ion-header class="ion-no-border"><ion-toolbar><ion-title>Alerts</ion-title></ion-toolbar></ion-header>
+    <ion-header class="ion-no-border"><ion-toolbar><ion-title>Notifications</ion-title><ion-buttons slot="end"><button v-if="unreadCount" class="notification-read-all" type="button" :disabled="markingAll" @click="markAllRead">{{ markingAll ? 'UPDATING…' : 'READ ALL' }}</button></ion-buttons></ion-toolbar></ion-header>
     <ion-content>
-      <NetworkBanner :last-updated-at="lastUpdatedAt" :retry="retryConnection" :busy="loading" />
-      <ion-refresher slot="fixed" @ionRefresh="refresh"><ion-refresher-content pulling-text="SYNC FARM" refreshing-text="Synchronizing alerts…" /></ion-refresher>
+      <NetworkBanner :last-updated-at="lastUpdatedAt" :retry="refresh" :busy="loading" />
+      <ion-refresher slot="fixed" @ionRefresh="pullRefresh"><ion-refresher-content pulling-text="SYNC INBOX" refreshing-text="Synchronizing notifications…" /></ion-refresher>
       <main class="page-wrap alerts-shell">
-        <section class="alerts-hero">
-          <div><p class="eyebrow">FARM NOTIFICATIONS</p><h1>Stay ahead of every signal.</h1><p>{{ unreadCount ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'} need attention.` : 'You are all caught up.' }}</p></div>
+        <section class="alerts-hero notification-hero">
+          <div><p class="eyebrow">OWNER NOTIFICATION CENTER</p><h1>Alerts and marketplace activity.</h1><p>{{ unreadCount ? unreadCount + ' unread notification' + (unreadCount === 1 ? '' : 's') + ' need attention.' : 'You are all caught up.' }}</p></div>
           <span><strong>{{ unreadCount }}</strong><small>UNREAD</small></span>
         </section>
 
-        <div class="alert-filter-row" aria-label="Alert categories">
-          <button v-for="item in filters" :key="item" type="button" :class="{ active: filter === item }" @click="selectFilter(item)">{{ titleCase(item) }}<span>{{ filterCount(item) }}</span></button>
+        <div class="notification-filter-row" aria-label="Notification categories">
+          <button v-for="option in filters" :key="option.value" type="button" :class="{ active: filter === option.value }" @click="selectFilter(option.value)">{{ option.label }}<span>{{ filterCount(option.value) }}</span></button>
         </div>
 
-        <StatePanel v-if="loading && !alerts.length" loading title="Loading alerts" message="Checking recent farm events." />
-        <StatePanel v-else-if="error && !alerts.length" tone="danger" title="Unable to retrieve alerts" :message="error" :retry="reset" />
-        <div v-if="error && alerts.length" class="stale-data-notice" role="status"><ion-icon :icon="warningOutline" /><div><strong>Showing previously loaded alerts</strong><small>{{ error }}</small></div><button type="button" @click="retryConnection">Retry</button></div>
-        <section v-if="!loading && (!error || alerts.length) && !visible.length" class="alerts-empty-state">
+        <StatePanel v-if="loading && !items.length" loading title="Loading notifications" message="Checking farm alerts and marketplace activity." />
+        <StatePanel v-else-if="error && !items.length" tone="danger" title="Notifications unavailable" :message="error" :retry="refresh" />
+        <div v-if="error && items.length" class="stale-data-notice" role="status"><ion-icon :icon="warningOutline" /><div><strong>Showing previously loaded notifications</strong><small>{{ error }}</small></div><button type="button" @click="refresh">Retry</button></div>
+
+        <section v-if="!loading && !items.length && !error" class="alerts-empty-state">
           <span><ion-icon :icon="checkmarkCircleOutline" /></span>
-          <div><strong>No {{ filter === 'all' ? 'active' : filter }} alerts</strong><p>Everything looks good in this notification category.</p></div>
-          <button v-if="filter !== 'all'" type="button" @click="selectFilter('all')">Show all activity</button>
+          <div><strong>No notifications here</strong><p>There is no activity in this category.</p></div>
+          <button v-if="filter !== 'all'" type="button" @click="selectFilter('all')">Show everything</button>
         </section>
 
-        <section v-else-if="visible.length" class="rich-alert-list">
-          <article v-for="item in visible" :key="item.id" :class="[severityClass(item), { unread: !item.is_read, expanded: expandedAlertId === item.id }]">
-            <button class="alert-summary" type="button" :aria-expanded="expandedAlertId === item.id" @click="toggleAlert(item)">
-              <span class="alert-icon"><ion-icon :icon="severityIcon(item)" /></span>
-              <div class="alert-content">
-                <div><span>{{ item.type_display }}</span><time>{{ relativeTime(item.created_at) }}</time></div>
-                <h2>{{ item.title }}</h2>
-                <p>{{ item.description }}</p>
-                <small v-if="item.source"><ion-icon :icon="radioOutline" />{{ item.source }}</small>
+        <section v-else class="unified-notification-list">
+          <article v-for="item in items" :key="item.key" :class="[item.severity, { unread: !item.is_read }]">
+            <span class="unified-notification-icon"><ion-icon :icon="itemIcon(item)" /></span>
+            <div class="unified-notification-copy">
+              <header><span>{{ item.type_display }}</span><time>{{ relativeTime(item.created_at) }}</time></header>
+              <h2>{{ item.title }}</h2>
+              <p>{{ item.message || 'Open the related activity for more information.' }}</p>
+              <small><ion-icon :icon="item.source_kind === 'farm' ? radioOutline : storefrontOutline" />{{ item.source_label }}</small>
+              <div class="unified-notification-actions">
+                <button v-if="!item.is_read" type="button" :disabled="markingKey === item.key" @click="markRead(item)">{{ markingKey === item.key ? 'UPDATING…' : 'MARK READ' }}</button>
+                <button class="primary" type="button" @click="openNotification(item)">OPEN</button>
               </div>
-              <span v-if="!item.is_read" class="unread-marker">NEW</span>
-              <ion-icon class="alert-chevron" :icon="chevronDownOutline" />
-            </button>
-
-            <div v-if="expandedAlertId === item.id" class="alert-expanded-details">
-              <div class="alert-category-label"><ion-icon :icon="severityIcon(item)" />{{ titleCase(category(item)) }} notification</div>
-              <p>{{ item.description }}</p>
-              <dl>
-                <div><dt>Recorded</dt><dd>{{ exactTime(item.created_at) }}</dd></div>
-                <div v-if="item.source"><dt>Source</dt><dd>{{ item.source }}</dd></div>
-                <div><dt>State</dt><dd>{{ item.is_resolved ? 'Resolved' : 'Active' }}</dd></div>
-                <div><dt>Attention</dt><dd>{{ item.is_read ? 'Reviewed' : 'Unread' }}</dd></div>
-              </dl>
-              <button v-if="!item.is_read" type="button" class="mark-read-action" :disabled="markingId === item.id" @click.stop="markRead(item)">{{ markingId === item.id ? 'UPDATING…' : 'MARK AS REVIEWED' }}</button>
             </div>
+            <i v-if="!item.is_read" aria-label="Unread"></i>
           </article>
         </section>
+
         <div v-if="loadMoreError" class="pagination-retry" role="alert"><span>{{ loadMoreError }}</span><button type="button" @click="loadMore">TRY AGAIN</button></div>
       </main>
-      <ion-infinite-scroll :disabled="!hasMore || Boolean(loadMoreError)" threshold="140px" @ionInfinite="loadNext"><ion-infinite-scroll-content loading-spinner="crescent" loading-text="Loading more alerts…" /></ion-infinite-scroll>
+      <ion-infinite-scroll :disabled="!hasMore || Boolean(loadMoreError)" threshold="140px" @ionInfinite="loadNext"><ion-infinite-scroll-content loading-spinner="crescent" loading-text="Loading more notifications…" /></ion-infinite-scroll>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { IonContent, IonHeader, IonIcon, IonInfiniteScroll, IonInfiniteScrollContent, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave } from '@ionic/vue';
-import { alertCircleOutline, checkmarkCircleOutline, chevronDownOutline, informationCircleOutline, radioOutline, warningOutline } from 'ionicons/icons';
+import { IonButtons, IonContent, IonHeader, IonIcon, IonInfiniteScroll, IonInfiniteScrollContent, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave, toastController } from '@ionic/vue';
+import { alertCircleOutline, checkmarkCircleOutline, chatbubblesOutline, informationCircleOutline, radioOutline, storefrontOutline, warningOutline } from 'ionicons/icons';
 import NetworkBanner from '@/components/NetworkBanner.vue';
 import StatePanel from '@/components/StatePanel.vue';
-import { usePaginatedResource } from '@/composables/usePaginatedResource';
-import { alertService } from '@/services/alert.service';
-import type { Notification } from '@/types/api';
-import { relativeTime, titleCase } from '@/utils/format';
+import { notificationService, type NotificationFacets, type UnifiedNotification, type UnifiedNotificationFilter } from '@/services/notification.service';
+import { setNotificationUnreadCount } from '@/stores/notification.store';
+import { relativeTime } from '@/utils/format';
 
-const filters = ['all', 'critical', 'warning', 'information'];
-const filter = ref('all');
-const expandedAlertId = ref<number>();
-const markingId = ref<number>();
-let markController: AbortController | undefined;
-const { items: alerts, loading, error, loadMoreError, lastUpdatedAt, hasLoaded, hasMore, activate, deactivate, reset, refresh: refreshPage, loadMore } = usePaginatedResource<Notification>({
-  fetchPage: (page, signal) => alertService.list(page, signal),
-  getKey: (item) => item.id,
-  initialErrorMessage: 'Farm notifications could not be retrieved.',
-  moreErrorMessage: 'More notifications could not be loaded. Previously loaded alerts are still available.',
-});
-const category = (item: Notification) => ['critical', 'high'].includes(item.severity) ? 'critical' : ['medium', 'low'].includes(item.severity) ? 'warning' : 'information';
-const visible = computed(() => alerts.value.filter((item) => filter.value === 'all' || category(item) === filter.value));
-const unreadCount = computed(() => alerts.value.filter((item) => !item.is_read).length);
-const filterCount = (name: string) => name === 'all' ? alerts.value.length : alerts.value.filter((item) => category(item) === name).length;
-const severityClass = (item: Notification) => category(item);
-const severityIcon = (item: Notification) => category(item) === 'critical' ? alertCircleOutline : category(item) === 'warning' ? warningOutline : informationCircleOutline;
-const exactTime = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+const router = useRouter();
+const filters: Array<{ value: UnifiedNotificationFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'alerts', label: 'Farm alerts' },
+  { value: 'messages', label: 'Messages' },
+  { value: 'transactions', label: 'Transactions' },
+  { value: 'marketplace', label: 'Marketplace' },
+];
+const items = ref<UnifiedNotification[]>([]);
+const filter = ref<UnifiedNotificationFilter>('all');
+const loading = ref(true);
+const error = ref('');
+const loadMoreError = ref('');
+const unreadCount = ref(0);
+const facets = ref<NotificationFacets>();
+const page = ref(1);
+const hasMore = ref(false);
+const lastUpdatedAt = ref<string | null>(null);
+const markingKey = ref('');
+const markingAll = ref(false);
+let controller: AbortController | undefined;
+let active = false;
 
-function selectFilter(value: string) {
-  if (filter.value === value) return;
-  filter.value = value;
-  expandedAlertId.value = undefined;
-  void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined);
-  void reset();
-}
+const itemIcon = (item: UnifiedNotification) => item.category === 'messages' ? chatbubblesOutline : item.source_kind === 'marketplace' ? storefrontOutline : item.severity === 'critical' ? alertCircleOutline : item.severity === 'warning' ? warningOutline : informationCircleOutline;
+const reasonMessage = (reason: unknown) => reason instanceof Error ? reason.message : 'Notifications could not be retrieved.';
+const filterCount = (value: UnifiedNotificationFilter) => facets.value?.[value] ?? (filter.value === value ? items.value.length : 0);
 
-function toggleAlert(item: Notification) {
-  expandedAlertId.value = expandedAlertId.value === item.id ? undefined : item.id;
-  void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined);
-}
-
-async function markRead(item: Notification) {
-  if (item.is_read || markingId.value) return;
-  markingId.value = item.id;
-  const controller = new AbortController();
-  markController = controller;
+async function load(reset = true) {
+  if (reset) {
+    controller?.abort();
+    controller = new AbortController();
+    loading.value = true;
+    error.value = '';
+    loadMoreError.value = '';
+    page.value = 1;
+  }
+  const requestController = controller || new AbortController();
+  controller = requestController;
   try {
-    const updated = await alertService.markRead(item.id, controller.signal);
-    if (!controller.signal.aborted) {
-      Object.assign(item, updated);
-      void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => undefined);
-    }
-  } catch {
-    // Keep the expanded alert usable if the acknowledgement request fails.
+    const data = await notificationService.list(filter.value, page.value, requestController.signal);
+    if (!active || requestController.signal.aborted) return;
+    items.value = reset ? data.results : [...items.value, ...data.results.filter((item) => !items.value.some((existing) => existing.key === item.key))];
+    unreadCount.value = data.unread_count;
+    facets.value = data.facets;
+    setNotificationUnreadCount(data.unread_count);
+    hasMore.value = Boolean(data.next);
+    lastUpdatedAt.value = new Date().toISOString();
+  } catch (reason) {
+    if (!active || requestController.signal.aborted) return;
+    if (reset) error.value = reasonMessage(reason);
+    else loadMoreError.value = reasonMessage(reason);
   } finally {
-    if (markController === controller) { markController = undefined; markingId.value = undefined; }
+    if (active && !requestController.signal.aborted) loading.value = false;
   }
 }
 
-async function refresh(event: CustomEvent) {
-  await refreshPage();
-  (event.target as HTMLIonRefresherElement).complete();
+async function selectFilter(value: UnifiedNotificationFilter) {
+  if (filter.value === value) return;
+  filter.value = value;
+  items.value = [];
+  void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined);
+  await load(true);
 }
-async function retryConnection() { await (alerts.value.length ? refreshPage() : reset()); }
+
+async function markRead(item: UnifiedNotification) {
+  if (item.is_read || markingKey.value) return;
+  markingKey.value = item.key;
+  try {
+    await notificationService.markRead(item);
+    item.is_read = true;
+    unreadCount.value = Math.max(0, unreadCount.value - 1);
+    setNotificationUnreadCount(unreadCount.value);
+  } finally {
+    markingKey.value = '';
+  }
+}
+
+async function openNotification(item: UnifiedNotification) {
+  try { await markRead(item); } catch { /* Opening the authorized target remains useful. */ }
+  if (item.target) await router.push(item.target);
+}
+
+async function markAllRead() {
+  if (markingAll.value) return;
+  markingAll.value = true;
+  try {
+    const result = await notificationService.markAllRead();
+    items.value.forEach((item) => { item.is_read = true; });
+    unreadCount.value = 0;
+    setNotificationUnreadCount(0);
+    const toast = await toastController.create({ message: String(result.marked_read) + ' notifications marked as read.', duration: 1700, position: 'top', color: 'success' });
+    await toast.present();
+  } finally {
+    markingAll.value = false;
+  }
+}
+
+async function refresh() { await load(true); }
+async function pullRefresh(event: CustomEvent) { await refresh(); await (event.target as HTMLIonRefresherElement).complete(); }
+async function loadMore() { if (!hasMore.value || loading.value) return; page.value += 1; loadMoreError.value = ''; await load(false); }
 async function loadNext(event: CustomEvent) { await loadMore(); await (event.target as HTMLIonInfiniteScrollElement).complete(); }
-function startPage() { activate(); if (!hasLoaded.value) void reset(); }
-function stopPage() {
-  deactivate();
-  markController?.abort();
-  markController = undefined;
-  markingId.value = undefined;
-}
-onIonViewDidEnter(startPage); onIonViewDidLeave(stopPage); onBeforeUnmount(stopPage);
+function start() { active = true; void load(true); }
+function stop() { active = false; controller?.abort(); controller = undefined; }
+onIonViewDidEnter(start); onIonViewDidLeave(stop); onBeforeUnmount(stop);
 </script>

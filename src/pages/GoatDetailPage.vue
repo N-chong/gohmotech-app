@@ -1,6 +1,6 @@
 <template>
   <ion-page class="goat-profile-page">
-    <ion-header class="ion-no-border"><ion-toolbar><ion-buttons slot="start"><AppBackButton fallback="/app/goats" /></ion-buttons><ion-title>Goat profile</ion-title></ion-toolbar></ion-header>
+    <ion-header class="ion-no-border"><ion-toolbar><ion-buttons slot="start"><AppBackButton fallback="/app/goats" /></ion-buttons><ion-title>Goat profile</ion-title><ion-buttons slot="end"><router-link class="profile-edit-link" :to="editPath"><ion-icon :icon="createOutline" />EDIT</router-link></ion-buttons></ion-toolbar></ion-header>
     <ion-content><main class="page-wrap profile-shell">
       <StatePanel v-if="loading" loading title="Loading profile" message="Retrieving goat details." />
       <StatePanel v-else-if="error" tone="danger" title="Unable to load goat" :message="error" :retry="load" />
@@ -14,6 +14,7 @@
           <div v-if="gallery.length > 1" class="profile-gallery-controls"><button type="button" aria-label="Previous goat angle" @click.stop="changeImage(-1)"><ion-icon :icon="chevronBackOutline" /></button><span><i v-for="(image, index) in gallery" :key="image.key" :class="{ active: index === activeImageIndex }"></i></span><button type="button" aria-label="Next goat angle" @click.stop="changeImage(1)"><ion-icon :icon="chevronForwardOutline" /></button></div>
         </section>
         <div v-if="gallery.length > 1" class="angle-selector" role="tablist" aria-label="Goat image angles"><button v-for="(image, index) in gallery" :key="image.key" type="button" role="tab" :aria-selected="index === activeImageIndex" :class="{ active: index === activeImageIndex }" @click="selectImage(index)">{{ image.label }}</button></div>
+        <router-link class="goat-photo-manage-link" :to="photoPath"><ion-icon :icon="imagesOutline" /><span><small>VISUAL IDENTITY</small><strong>Manage reference photos</strong></span><ion-icon :icon="chevronForwardOutline" /></router-link>
 
         <section class="profile-snapshot"><div><span><ion-icon :icon="scaleOutline" /></span><small>LATEST WEIGHT</small><strong>{{ latestWeight }} kg</strong></div><div><span><ion-icon :icon="heartOutline" /></span><small>HEALTH</small><strong>{{ titleCase(goat.health_status) }}</strong></div><div><span><ion-icon :icon="radioOutline" /></span><small>LAST DETECTED</small><strong>{{ relativeTime(goat.last_seen) }}</strong></div></section>
 
@@ -41,7 +42,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from '@ionic/vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { calendarOutline, chevronBackOutline, chevronForwardOutline, documentTextOutline, heartOutline, navigateCircleOutline, radioOutline, scaleOutline, trendingDownOutline, trendingUpOutline } from 'ionicons/icons';
+import { calendarOutline, chevronBackOutline, chevronForwardOutline, createOutline, documentTextOutline, heartOutline, imagesOutline, navigateCircleOutline, radioOutline, scaleOutline, trendingDownOutline, trendingUpOutline } from 'ionicons/icons';
 import AppBackButton from '@/components/AppBackButton.vue';
 import AuthImage from '@/components/AuthImage.vue';
 import StatePanel from '@/components/StatePanel.vue';
@@ -49,7 +50,9 @@ import { goatService } from '@/services/goat.service';
 import type { GoatDetail } from '@/types/api';
 import { relativeTime, titleCase } from '@/utils/format';
 
-const route = useRoute(); const router = useRouter(); const goat = ref<GoatDetail>(); const loading = ref(true); const error = ref(''); const activeImageIndex = ref(0); const pointerX = ref(0);
+const route = useRoute(); const router = useRouter(); const goat = ref<GoatDetail>();
+const photoPath = computed(() => '/app/goats/' + encodeURIComponent(String(route.params.goatId || '')) + '/photos');
+const editPath = computed(() => `/app/goats/${encodeURIComponent(String(route.params.goatId || ''))}/edit`); const loading = ref(true); const error = ref(''); const activeImageIndex = ref(0); const pointerX = ref(0);
 const gallery = computed(() => { if (!goat.value) return []; const images = goat.value.images.map((image) => ({ key: String(image.id), src: image.image_url, label: image.angle_display || 'Photo' })); if (!images.length && goat.value.cover_image_url) images.push({ key: 'cover', src: goat.value.cover_image_url, label: 'Primary' }); return images; });
 const activeImage = computed(() => gallery.value[activeImageIndex.value]);
 const weights = computed(() => (goat.value?.weight_history || []).map((item) => Number(item.weight_kg)).reverse());

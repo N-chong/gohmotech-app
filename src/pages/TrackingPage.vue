@@ -3,9 +3,10 @@
     <ion-header class="ion-no-border tracking-header"><ion-toolbar><ion-buttons slot="start"><AppBackButton fallback="/app/more" /></ion-buttons><ion-title>Goat tracking</ion-title></ion-toolbar></ion-header>
     <ion-content><ion-refresher slot="fixed" @ionRefresh="refresh"><ion-refresher-content pulling-text="SCAN RECEIVERS" refreshing-text="Reading BLE signals…" /></ion-refresher><main class="page-wrap tracking-shell">
       <section class="tracking-intro"><div><p class="eyebrow">BLE PROXIMITY</p><h1>Herd signal radar.</h1><p>Receiver-based presence without pretending to provide GPS location.</p></div><span><ion-icon :icon="bluetoothOutline" /></span></section>
-      <StatePanel v-if="loading" loading title="Locating tagged goats" message="Reading the latest BLE receiver observations." />
-      <StatePanel v-else-if="error" tone="danger" title="Tracking unavailable" :message="error" :retry="load" />
+      <StatePanel v-if="loading && !snapshot" loading title="Locating tagged goats" message="Reading the latest BLE receiver observations." />
+      <StatePanel v-else-if="error && !snapshot" tone="danger" title="Tracking unavailable" :message="error" :retry="retry" />
       <template v-else-if="snapshot">
+        <div v-if="error" class="stale-data-notice" role="status"><ion-icon :icon="warningOutline" /><div><strong>Showing the last receiver snapshot</strong><small>{{ error }}</small></div><button type="button" @click="retry">Retry</button></div>
         <section class="proximity-radar-section interactive-radar"><div class="radar-heading"><span><i></i>LIVE RECEIVER VIEW</span><small>{{ snapshot.generated_at ? `Updated ${relativeTime(snapshot.generated_at)}` : 'Near / Far categories' }}</small></div>
           <div class="ble-radar"><div class="radar-sweep"></div><i class="ring one"></i><i class="ring two"></i><i class="ring three"></i><button class="radar-center" type="button" aria-label="BLE receiver center" @click="selectedTracker = undefined"><ion-icon :icon="radioOutline" /><small>RECEIVER</small></button><button v-for="(item, index) in radarItems" :key="item.beacon.id" type="button" class="radar-goat" :class="[item.status, { selected: selectedTracker?.beacon.id === item.beacon.id }]" :style="radarStyle(item.status, index, radarItems.length)" :aria-label="`${item.goat.name || item.goat.goat_id}, ${item.proximity_display}`" @click="selectTracker(item)"><b>{{ item.goat.name?.slice(0, 1) || 'G' }}</b><small>{{ item.proximity_display }}</small></button></div>
           <div class="radar-legend"><span><i class="near"></i>Near</span><span><i class="far"></i>Far</span><span><i class="lost"></i>Not detected</span></div>
@@ -20,20 +21,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar } from '@ionic/vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonRefresher, IonRefresherContent, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave } from '@ionic/vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { batteryHalfOutline, bluetoothOutline, chevronForwardOutline, closeOutline, radioOutline } from 'ionicons/icons';
+import { batteryHalfOutline, bluetoothOutline, chevronForwardOutline, closeOutline, radioOutline, warningOutline } from 'ionicons/icons';
 import AppBackButton from '@/components/AppBackButton.vue';
 import StatePanel from '@/components/StatePanel.vue';
+import { TrackingPoller } from '@/services/tracking-poller';
 import { trackingService, type TrackingRow, type TrackingSnapshot } from '@/services/tracking.service';
 import { relativeTime, titleCase } from '@/utils/format';
 
-const snapshot = ref<TrackingSnapshot>(); const loading = ref(true); const error = ref(''); const selectedTracker = ref<TrackingRow>();
+const snapshot = ref<TrackingSnapshot>();
+const loading = ref(true);
+const error = ref('');
+const selectedTracker = ref<TrackingRow>();
+let requestController: AbortController | undefined;
 const radarItems = computed(() => (snapshot.value?.goats || []).slice(0, 6));
 const radarStyle = (status: string, index: number, total: number) => ({ '--angle': `${(index / Math.max(total, 1)) * 360}deg`, '--distance': status === 'out_of_range' ? '104px' : status.includes('far') ? '78px' : '52px' });
 function selectTracker(item: TrackingRow) { selectedTracker.value = item; void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }
-async function load() { loading.value = true; error.value = ''; try { snapshot.value = await trackingService.get(); if (selectedTracker.value) selectedTracker.value = snapshot.value.goats.find((item) => item.beacon.id === selectedTracker.value?.beacon.id); } catch { error.value = 'The BLE tracking snapshot could not be retrieved.'; } finally { loading.value = false; } }
-async function refresh(event: CustomEvent) { await load(); (event.target as HTMLIonRefresherElement).complete(); }
-onMounted(load);
+async function load(): Promise<number> {
+  const controller = new AbortController();
+  requestController = controller;
+  if (!snapshot.value) loading.value = true;
+  try {
+    const next = await trackingService.get(controller.signal);
+    if (controller.signal.aborted) return 5000;
+    snapshot.value = next;
+    error.value = '';
+    if (selectedTracker.value) selectedTracker.value = next.goats.find((item) => item.beacon.id === selectedTracker.value?.beacon.id);
+    return (next.poll_interval_seconds || 5) * 1000;
+  } catch {
+    if (!controller.signal.aborted) error.value = 'Live receiver updates are temporarily unavailable.';
+    return 5000;
+  } finally {
+    if (requestController === controller) requestController = undefined;
+    loading.value = false;
+  }
+}
+const poller = new TrackingPoller(load);
+async function retry() { await poller.refreshNow(); }
+async function refresh(event: CustomEvent) { await poller.refreshNow(); (event.target as HTMLIonRefresherElement).complete(); }
+function startPage() { void poller.start(); }
+function stopPage() { poller.stop(); requestController?.abort(); requestController = undefined; }
+onIonViewDidEnter(startPage);
+onIonViewDidLeave(stopPage);
+onBeforeUnmount(stopPage);
 </script>

@@ -4,21 +4,21 @@
 
 ## Copy-ready instruction for another AI
 
-You are working on the **GoHMoTech mobile app**, an authenticated Ionic/Vue client for goat-farm owners and operators. Read this complete document before changing code. Inspect the relevant source files before implementing a request. Preserve the existing backend contracts, authentication model, connectivity safeguards, Ionic navigation behavior, and visual language. Do not invent API endpoints, simulated telemetry, historical data, or unsupported marketplace features. Never expose tokens, credentials, realtime tickets, or environment secrets. After a change, run the smallest relevant tests plus the full build; report any verification that could not be run.
+You are working on the **GoHMoTech mobile app**, an authenticated Ionic/Vue client for the GoHMoTech farm owner/client. Read this complete document before changing code. Inspect the relevant source files before implementing a request. Preserve the existing backend contracts, authentication model, connectivity safeguards, Ionic navigation behavior, and visual language. Do not invent API endpoints, simulated telemetry, historical data, or unsupported marketplace features. Never expose tokens, credentials, realtime tickets, or environment secrets. After a change, run the smallest relevant tests plus the full build; report any verification that could not be run.
 
 ## 1. Product summary
 
 GoHMoTech is a farm monitoring and control client. It gives authenticated users access to:
 
 - A live farm dashboard with system health, environment readings, feed status, herd count, automation state, and recent alerts.
-- Camera discovery and ticket-authenticated live camera streams.
-- Goat inventory search/filtering and detailed goat profiles with images, weights, health information, vaccination information, and recent activity.
+- Camera discovery, ticket-authenticated live camera streams, and shared AI live-detection status/control.
+- Goat inventory search/filtering, owner registration/editing, standardized reference-photo management, and detailed goat profiles with images, weights, health information, vaccination information, and recent activity.
 - Farm notifications that can be filtered, expanded, and marked as read.
-- BLE-based goat proximity and receiver tracking snapshots.
+- Server-paced live BLE goat proximity and receiver tracking snapshots.
 - Protected door, light, and feeder actuator status/control.
 - Security detection events with authenticated snapshots and confidence/review details.
 - Current-state farm intelligence assembled from dashboard, herd, tracking, and security endpoints.
-- A marketplace preview/workspace whose authenticated mobile backend integration is not yet implemented.
+- A token-authenticated marketplace catalog with listing details, protected images, trusted seller identity, Farm Owner/admin listing management, and a seller inbox for inquiries and reservations.
 
 This repository is the **frontend/mobile client only**. The backend, IoT controllers, BLE receivers, cameras, security processing, and persistent farm database are external systems hosted by GoHMoTech.
 
@@ -28,8 +28,8 @@ This repository is the **frontend/mobile client only**. The backend, IoT control
 - Do not fabricate sensor readings, device connectivity, historical charts, feed levels, marketplace listings, or command success.
 - A WebSocket frame is an invalidation signal; refresh the authoritative HTTP resource instead of treating an arbitrary frame as final state.
 - Physical controls must fail closed when either the server or the relevant controller is not confirmed online.
-- Marketplace catalog and transaction data must remain clearly marked unavailable until real authenticated endpoints exist.
-- Reports are current snapshots, not historical analytics. Historical curves and date comparisons need real time-series endpoints.
+- Marketplace catalog and owner-side seller transactions must come from authenticated mobile endpoints. Mobile access is restricted to active Farm Owner/admin accounts, while buyer marketplace activity remains website-only.
+- Environmental reports use completed 30-minute server summaries for bounded 24-hour and 7-day history. Herd distributions use the complete smart-farm inventory, and security quality uses bounded 24-hour/7-day server aggregates.
 
 ## 2. Technology and build targets
 
@@ -47,7 +47,7 @@ This repository is the **frontend/mobile client only**. The backend, IoT control
 | End-to-end tests | Cypress |
 | Styling | Ionic CSS plus project-wide CSS variables and `src/theme/app.css` |
 
-Current package version: `1.5.0`. The next Android release uses version name `1.6`, version code `16`, minimum SDK 24, compile/target SDK 36, Android Gradle Plugin 8.13.0, and Gradle 8.14.3.
+Current package version: `2.1.0`. Android release 2.1 uses version name `2.1`, version code `21`, minimum SDK 24, compile/target SDK 36, Android Gradle Plugin 8.13.0, and Gradle 8.14.3.
 
 There is no Pinia/Vuex store. Shared state is implemented with Vue `reactive` objects exposed through `readonly` wrappers.
 
@@ -116,18 +116,26 @@ Important architectural properties:
 
 | Route | Screen | Notes |
 | --- | --- | --- |
-| `/login` | Login | Only public route; checks farm-server availability and signs in. |
+| `/login` | Login | Only public route; signs in active farm Owner or administrator accounts. |
 | `/app/home` | Dashboard | System/environment/feed/herd/alerts snapshot; sensor WebSocket triggers throttled refreshes. |
-| `/app/live` | Live cameras | Gets configured cameras, requests a short-lived stream ticket, and displays the selected MJPEG/image stream. |
-| `/app/goats` | Goat inventory | Backend search plus local gender/status filters, paginated infinite loading; tap opens profile, long press opens an action sheet. |
-| `/app/alerts` | Alerts | Paginated infinite loading; filter by critical/warning/information; expand and mark unread items as read. |
+| `/app/live` | Live cameras | Displays ticketed camera streams and joins the shared AI detection viewer session; owners/admins can start or stop manual detection. |
+| `/app/goats` | Goat inventory | Server-side search and gender/status filters with authoritative facets and paginated infinite loading; owners can register goats, tap to open a profile, or long press for actions. |
+| `/app/alerts` | Alerts | Farm-owner-only feed merging farm/security alerts with seller marketplace inquiries, messages, reservations, pickup, and sales; includes filters, unread badges, deep links, and read actions. |
 | `/app/more` | More tools | Hub for automation, tracking, reports, security, marketplace, and sign-out. |
-| `/app/goats/:goatId` | Goat profile | Authenticated gallery, weight trend, health/vaccination data, and activity timeline. |
+| /app/goats/new | Register goat | Owner livestock registration using production model choices and validation. |
+| /app/goats/:goatId | Goat profile | Authenticated gallery, weight trend, health/vaccination data, activity timeline, and record/photo management actions. |
+| /app/goats/:goatId/photos | Goat photos | Standardized front/left/right/rear/face capture or upload with production quality checks, safe replacement, fallback selection, and deletion. |
+| /app/goats/:goatId/edit | Edit goat | Owner editing for identity and care fields; confirmed weight history is protected. |
 | `/app/automation` | Automation | Connectivity-aware actuator state and protected physical commands; management permission required in the UI. |
-| `/app/tracking` | Goat tracking | Latest BLE proximity snapshot and receiver/beacon details. |
+| `/app/feeding` | Feeding | Feed level, automation master state, schedule CRUD, recent events, refill recording, and connectivity-gated manual dispensing. |
+| `/app/tracking` | Goat tracking | Server-paced live BLE proximity snapshots with receiver/beacon details and last-good-state fallback. |
 | `/app/security` | Security center | Paginated detection timeline, snapshots, confidence, status, and review state. |
-| `/app/reports` | Farm intelligence | Current overview, herd distribution, BLE coverage, and security quality. Uses partial results if a source fails. |
-| `/app/marketplace` | Marketplace | Honest preview/workspace; catalog and transaction feeds are explicitly not connected. |
+| `/app/reports` | Farm intelligence | Current overview, 24-hour/7-day environmental history, complete smart-farm herd distribution, BLE coverage, and authoritative 24-hour/7-day security aggregates. Uses partial results if a source fails. |
+| /app/marketplace | Marketplace | Paginated trusted catalog with search, availability filters, sorting, and authenticated images. |
+| `/app/marketplace/:listingId` | Listing details | Gallery, livestock record, verified seller identity/location, pricing, pickup terms, and owner management link when applicable. |
+| `/app/marketplace/manage` | Manage listings | Farm Owner/admin draft creation, price/description editing, optimized photo upload, cover selection, safe deletion, and photo-gated publish/unpublish actions. |
+| `/app/marketplace/inbox` | Seller inbox | Farm Owner/admin buyer conversations, unread counts, reservations, pickup coordination, and sale completion. |
+| `/app/marketplace/conversations/:conversationId` | Transaction conversation | Owner seller view of participant-only message history, text or verified-image replies, active reservation, and close/reopen controls. |
 
 Legacy top-level secondary paths redirect into `/app/...`. Unknown routes redirect to `/app/home`.
 
@@ -152,16 +160,40 @@ Do not hard-code a different host in page components. Do not commit credentials 
 | `POST` | `/api/mobile/auth/logout/` | Server logout; local logout still completes if it fails. |
 | `POST` | `/api/mobile/auth/realtime-ticket/` | Obtain a short-lived ticket for `websocket` or a specific `camera`. |
 | `GET` | `/api/mobile/dashboard/` | Current farm/system/dashboard snapshot. |
-| `GET` | `/api/mobile/goats/?page={n}&search={encoded}` | Paginated/searchable goat inventory. |
-| `GET` | `/api/mobile/goats/{encodedGoatId}/` | Full goat detail. |
+| `GET` | `/api/mobile/environment-history/?hours=24|168` | Completed 30-minute temperature, humidity, and light summaries for the dashboard environmental device. |
+| `GET` | `/api/mobile/live-detection/` | Current shared live-detection mode, viewer count, schedule, and latest detections. |
+| `POST` | `/api/mobile/live-detection/` | Viewer heartbeat/leave and permission-gated manual start/stop actions. |
+| GET/POST | /api/mobile/goats/?page={n}&search={encoded}&gender=...&status=... | Server-filtered smart-farm inventory with complete search-scoped facets, plus owner goat registration; community marketplace animals are excluded. |
+| GET | /api/mobile/goats/options/ | Model-driven breed, gender, health, and vaccination choices for livestock forms. |
+| `GET` | `/api/mobile/report-summary/?hours=24|168` | Complete smart-farm herd distributions plus bounded security review aggregates. |
+| `GET/PUT` | `/api/mobile/goats/{encodedGoatId}/` | Full goat detail and owner editing; editing cannot overwrite confirmed weight. |
+| `POST` | `/api/mobile/goats/{encodedGoatId}/images/` | Validate and create or replace one standardized reference-photo angle. |
+| `POST` | `/api/mobile/goats/{encodedGoatId}/images/{imageId}/` | Select the fallback photo or safely delete a photo from that goat. |
 | `GET` | `/api/mobile/cameras/` | Paginated camera configuration/status. |
 | `GET` | `/api/mobile/cameras/{id}/stream/?quality=55&fps=8&width=640&ticket=...` | Ticket-authenticated live stream. |
-| `GET` | `/api/mobile/tracking/` | Latest BLE receiver/proximity snapshot. |
+| `GET` | `/api/mobile/tracking/` | Smart-farm-only BLE receiver/proximity snapshot with a bounded client polling interval. |
+| `GET` | `/api/mobile/marketplace/listings/` | Paginated trusted listings with search, availability filters, and sorting. |
+| `GET` | `/api/mobile/marketplace/listings/{id}/` | Listing gallery, livestock details, verified seller identity, and manager capability. |
+| `GET` | `/api/mobile/marketplace/images/{id}/` | Token-authenticated image restricted to a public or manageable listing. |
+| `GET/POST` | `/api/mobile/marketplace/manage/` | Owner/admin managed-listing snapshot and draft creation. |
+| `PATCH/POST` | `/api/mobile/marketplace/manage/{id}/` | Owner/admin listing edits and publish/unpublish actions. |
+| `POST` | `/api/mobile/marketplace/manage/{id}/images/` | Upload up to six optimized listing photos per request, within the 10-photo goat limit. |
+| `POST` | `/api/mobile/marketplace/manage/{id}/images/{imageId}/` | Select the listing cover or safely delete an owner-app-uploaded photo. |
+| `GET` | `/api/mobile/marketplace/seller/conversations/` | Owner/admin seller inbox with unread counts and active reservations. |
+| `GET/POST` | `/api/mobile/marketplace/seller/conversations/{id}/` | Private thread, read tracking, text or verified-image replies, and close/reopen. |
+| `GET` | `/api/mobile/marketplace/seller/reservations/` | Managed Smart Farm reservation history and available actions. |
+| `POST` | `/api/mobile/marketplace/seller/reservations/{id}/` | Accept/reject/cancel, pickup coordination, and sale completion through marketplace services. |
+| `GET` | `/api/mobile/notifications/` | Farm-owner-only paginated feed merging farm alerts and owner seller activity, with complete category facets and unread totals. |
+| `GET` | `/api/mobile/notifications/summary/` | Farm-owner-only unread totals and complete inbox category facets for global UI. |
+| `POST` | `/api/mobile/notifications/{source}/{id}/` | Mark one authorized farm or owner marketplace notification read. |
+| `POST` | `/api/mobile/notifications/read-all/` | Mark all farm alerts and owner seller notifications read. |
+| `GET` | `/api/mobile/marketplace/messages/{id}/image/` | Token-authenticated private attachment restricted to conversation participants. |
 | `GET` | `/iot/api/actuators/` | Actuator list, state, mode, and connectivity metadata. |
 | `POST` | `/iot/api/actuators/{id}/control/` | Send a confirmed actuator state command. |
+| `GET/POST/PUT/DELETE` | `/feeding/api/config/`, `/feeding/api/schedules/`, `/feeding/api/levels/`, `/feeding/api/logs/` | Feeding configuration, schedule management, fill telemetry, feed history, refill, and manual-feed actions. |
 | `GET` | `/security/api/notifications/?page={n}&ordering=-created_at` | Notifications. |
 | `POST` | `/security/api/notifications/{id}/mark_read/` | Mark a notification read. |
-| `GET` | `/security/api/detections/?page={n}&ordering=-detected_at` | Security detections. |
+| `GET` | `/security/api/detections/?page={n}&ordering=-detected_at` | Paginated security detections with server-wide high-confidence and review-state KPIs. |
 
 WebSocket URL shape: `/ws/{channel}/?ticket={encodedTicket}`. `FarmSocket` supports `sensors`, `alerts`, `feeding`, and `detections`, but the current Home and Automation pages are the active users and both listen to `sensors`.
 
@@ -229,14 +261,16 @@ Maintain these fail-closed semantics for every future physical operation.
 
 The exact TypeScript contracts live in `src/types/api.ts` and the domain service files. Key shapes are:
 
-- `MobileUser`: identity, `admin | farm_owner | farm_operator` role, `farm_access`, and `manage_farm`.
-- `DashboardData`: generated timestamp; server/controller and IoT/camera counts; temperature/humidity/light; feed percentage/low state; registered-goat count; door/light summaries; recent alerts.
+- `MobileUser`: identity, `admin | farm_owner` role, `farm_access`, and `manage_farm`.
+- `DashboardData`: generated timestamp; server/controller and IoT/camera counts; temperature/humidity/light with independent 30-minute sensor freshness; feed percentage/low state; registered-goat count; door/light summaries; recent alerts.
+- `EnvironmentHistory`: bounded range, source device, and timestamped average/minimum/maximum/sample-count points for temperature, humidity, and light.
+- `LiveDetectionStatus`: shared inference mode/running/viewer state, schedule, selected camera, and latest goat/person detections.
 - `Goat`: identity, tag, breed, gender, age, weight, health/status, last detection, and cover image.
 - `GoatDetail`: Goat plus birth/markings/notes/vaccination fields, image collection, and weight history.
 - `Camera`: identity, type/location, active/status, connection/error timestamps.
 - `Notification`: severity/type/source, read/resolved state, description, timestamp, and optional event URL.
 - `Actuator`: door/light/feeder state and mode plus controller/device connectivity metadata.
-- `TrackingSnapshot`: summary counts and goat/beacon/receiver proximity rows.
+- `TrackingSnapshot`: summary counts, goat/beacon/receiver proximity rows, freshness timeouts, and the server polling interval.
 - `Detection`: timestamp, optional snapshot, source/type, confidence, status, and review state.
 - `ApiPage<T>`: DRF-style `count`, `next`, `previous`, and `results`.
 
@@ -248,6 +282,7 @@ The app intentionally uses one high-contrast light theme. Dark mode is not enabl
 
 - Global tokens are in `src/theme/variables.css`.
 - Most app styling is in `src/theme/app.css`.
+- Readability overrides keep body copy near 15px, controls and labels at least 14px, micro-labels at least 12px, form fields at 16px, and page titles at 20px.
 - Primary brand colors are emerald/green, navy, cyan, blue, gold, and danger coral.
 - The visual language combines white operational cards with darker technical/monitoring surfaces, strong uppercase micro-labels, generous rounded corners, restrained glows, and short motion.
 - Reuse `StatePanel` for loading/error/empty states, `AuthImage` for protected images, `AppBackButton` for secondary screens, and the existing Ionic/haptic patterns.
@@ -312,7 +347,7 @@ Unit tests currently cover:
 - Successful login, rejected credentials, and network failures.
 - Camera ticket/stream URL and actuator-control contracts.
 - Refusal to send commands to offline actuators.
-- Goat search/detail URL encoding.
+- Goat search/detail URL encoding, owner registration/editing payloads, server-defined form/photo choices, and standardized multipart photo actions.
 - Tracking, detection, notification, and mark-read contracts.
 - Secondary route nesting and hidden-tab metadata.
 - Refresh burst coalescing, queued-refresh cancellation, and active-request bounds.
@@ -322,6 +357,8 @@ Unit tests currently cover:
 - DRF page metadata, append/deduplication, end-of-list behavior, concurrent request suppression, criteria reset, failed-next-page preservation/retry, stale refresh preservation, and cached-page abort behavior.
 - Online/offline/unknown/synchronizing banner states, stale timestamps, and retry actions.
 - Actuator refusal when either the device/controller or farm server is offline.
+- Feeding snapshot aggregation and manual-feed request payloads.
+- Marketplace catalog, protected owner management, multipart listing-photo upload/actions, secure seller message attachments, seller conversations, reservation actions, and pickup coordination contracts.
 
 Cypress specs use intercepted APIs and cover login/dashboard entry, goat pagination/profile navigation, alert pagination/mark-as-read, security pagination/back navigation, camera loading, and online/offline automation behavior. They remain frontend workflow tests rather than backend integration tests.
 
@@ -329,13 +366,14 @@ When changing a service contract, concurrency mechanism, route topology, or sess
 
 ## 14. Known limitations and intentional placeholders
 
-- Marketplace browse/activity feeds have no mobile API integration.
-- Reports show current loaded records only; there is no historical time-series API.
-- Feeder actuator details do not include fill telemetry from the actuator endpoint.
-- Tracking is a fetched snapshot, not a continuously animated position feed.
-- Inventory, notification, and detection screens paginate incrementally; their category/gender/status counts reflect records loaded into the current client view rather than server-wide filtered totals because no server-side category/filter contract exists.
+- The unified notification center is intentionally restricted to farm-owner/client accounts and merges farm alerts with notifications addressed to the owner seller account.
+- Environmental data is the only report domain with a mobile time-series API. Herd reporting is a complete current snapshot; security provides complete bounded aggregates but not a plotted event time series.
+- The generic Automation actuator card does not include fill telemetry; the dedicated Feeding screen reads the real feed-level endpoint and matches it to the feeder device.
+- Tracking refreshes from server snapshots at the bounded advertised interval; BLE proximity remains receiver-based and must not be presented as GPS or exact animated coordinates.
+
 - The browser stores sessions in `localStorage`; native builds use secure storage.
-- Push notifications are not configured by this client unless a native `google-services.json` and related backend work are added.
+- Goat registration/editing covers the core livestock record, while standardized photos have their own validated workflow. BLE assignment, status changes, and confirmed weight entries remain separate and are not silently changed by profile editing.
+- Push notifications are not configured by this client unless a native google-services.json and related backend work are added.
 - E2E coverage is narrow.
 - `src/theme/app.css` is large and global; check existing selectors before adding new styles.
 
@@ -378,11 +416,13 @@ After editing:
 | Login/session issue | `src/App.vue`, `src/services/auth.service.ts`, `src/stores/auth.store.ts`, `src/services/api.ts`, `src/pages/LoginPage.vue` |
 | API error/retry issue | `src/services/api.ts`, `src/services/auth.service.ts` |
 | Dashboard/realtime issue | `src/pages/HomePage.vue`, `src/services/dashboard.service.ts`, `src/services/refresh-scheduler.ts`, `src/services/websocket.service.ts` |
-| Camera issue | `src/pages/LivePage.vue`, `src/services/camera.service.ts` |
-| Goat data/profile issue | `src/pages/GoatsPage.vue`, `src/pages/GoatDetailPage.vue`, `src/services/goat.service.ts`, `src/types/api.ts` |
+| Camera/live detection issue | `src/pages/LivePage.vue`, `src/services/camera.service.ts`, `src/services/live-detection.service.ts` |
+| Goat data/profile issue | `src/pages/GoatsPage.vue`, `src/pages/GoatRecordPage.vue`, `src/pages/GoatPhotosPage.vue`, `src/pages/GoatDetailPage.vue`, `src/services/goat.service.ts`, `src/types/api.ts` |
 | Alerts/security issue | `src/pages/AlertsPage.vue`, `src/pages/SecurityPage.vue`, `src/services/alert.service.ts`, `src/services/security.service.ts` |
-| BLE tracking issue | `src/pages/TrackingPage.vue`, `src/services/tracking.service.ts` |
+| BLE tracking issue | `src/pages/TrackingPage.vue`, `src/services/tracking.service.ts`, `src/services/tracking-poller.ts` |
 | Automation/device issue | `src/pages/AutomationPage.vue`, `src/services/automation.service.ts`, `src/stores/device.store.ts` |
+| Feeding issue | `src/pages/FeedingPage.vue`, `src/services/feeding.service.ts`, `src/services/automation.service.ts`, `src/stores/device.store.ts` |
+| Marketplace issue | `src/pages/MarketplacePage.vue`, `src/pages/MarketplaceDetailPage.vue`, `src/pages/MarketplaceManagePage.vue`, `src/pages/MarketplaceSellerInboxPage.vue`, `src/pages/MarketplaceConversationPage.vue`, `src/services/marketplace.service.ts` |
 | Navigation/back issue | `src/router/index.ts`, `src/layouts/TabsLayout.vue`, `src/components/AppBackButton.vue` |
 | Styling/design issue | `src/theme/variables.css`, `src/theme/app.css`, relevant Vue template |
 | Android packaging issue | `capacitor.config.ts`, `android/app/build.gradle`, `android/variables.gradle`, `android/app/src/main/AndroidManifest.xml` |

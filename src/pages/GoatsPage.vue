@@ -2,7 +2,7 @@
   <ion-page class="inventory-page">
     <ion-header class="ion-no-border"><ion-toolbar><ion-title>Goat inventory</ion-title></ion-toolbar></ion-header>
     <ion-content><NetworkBanner :last-updated-at="lastUpdatedAt" :retry="retryConnection" :busy="loading" /><ion-refresher slot="fixed" @ionRefresh="refresh"><ion-refresher-content pulling-text="SYNC HERD" refreshing-text="Updating livestock…" /></ion-refresher><main class="page-wrap inventory-shell">
-      <section class="inventory-hero"><div><p class="eyebrow">LIVESTOCK INTELLIGENCE</p><h1>Every goat.<br><span>One living record.</span></h1><p>Photography, health, weight, and recent detection in one herd surface.</p></div><span><strong>{{ total }}</strong><small>REGISTERED</small></span></section>
+      <section class="inventory-hero"><div><p class="eyebrow">LIVESTOCK INTELLIGENCE</p><h1>Every goat.<br><span>One living record.</span></h1><p>Photography, health, weight, and recent detection in one herd surface.</p><router-link class="inventory-add-link" to="/app/goats/new"><ion-icon :icon="addOutline" />REGISTER GOAT</router-link></div><span><strong>{{ registeredTotal }}</strong><small>REGISTERED</small></span></section>
       <section class="herd-context-rail"><div><small>VISIBLE</small><strong>{{ visible.length }}</strong></div><div><small>WITH DETECTION</small><strong>{{ recentlySeen }}</strong></div><div><small>NEEDS ATTENTION</small><strong>{{ attentionCount }}</strong></div></section>
 
       <div class="inventory-search" :class="{ focused: searchFocused }"><ion-searchbar v-model="search" :debounce="350" placeholder="Search ID, name, or tag" @ionInput="criteriaChanged" @ionFocus="searchFocused = true" @ionBlur="searchFocused = false" /></div>
@@ -35,29 +35,35 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonContent, IonHeader, IonIcon, IonInfiniteScroll, IonInfiniteScrollContent, IonModal, IonPage, IonRefresher, IonRefresherContent, IonSearchbar, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave } from '@ionic/vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { chevronForwardOutline, femaleOutline, fingerPrintOutline, informationCircleOutline, listOutline, maleOutline, navigateCircleOutline, personOutline, radioOutline, searchOutline, warningOutline } from 'ionicons/icons';
+import { addOutline, chevronForwardOutline, femaleOutline, fingerPrintOutline, informationCircleOutline, listOutline, maleOutline, navigateCircleOutline, personOutline, radioOutline, searchOutline, warningOutline } from 'ionicons/icons';
 import AuthImage from '@/components/AuthImage.vue';
 import NetworkBanner from '@/components/NetworkBanner.vue';
 import StatePanel from '@/components/StatePanel.vue';
 import { usePaginatedResource } from '@/composables/usePaginatedResource';
-import { goatService } from '@/services/goat.service';
+import { goatService, type GoatPage } from '@/services/goat.service';
 import type { Goat } from '@/types/api';
 import { relativeTime, titleCase } from '@/utils/format';
 
 const router = useRouter(); const search = ref(''); const filter = ref('all'); const searchFocused = ref(false); const selectedGoat = ref<Goat>();
 const longPressed = ref(false); let pressTimer: number | undefined;
-const { items: goats, count: total, loading, error, loadMoreError, lastUpdatedAt, hasLoaded, hasMore, activate, deactivate, reset, refresh: refreshPage, loadMore } = usePaginatedResource<Goat>({
-  fetchPage: (page, signal) => goatService.list(search.value, page, signal),
+const { items: goats, pageData, count: total, loading, error, loadMoreError, lastUpdatedAt, hasLoaded, hasMore, activate, deactivate, reset, refresh: refreshPage, loadMore } = usePaginatedResource<Goat>({
+  fetchPage: (page, signal) => goatService.list(search.value, filter.value, page, signal),
   getKey: (goat) => goat.id,
   initialErrorMessage: 'The livestock inventory could not be retrieved.',
   moreErrorMessage: 'More goats could not be loaded. Previously loaded profiles are still available.',
 });
 const filters = [{ value: 'all', label: 'All', icon: listOutline }, { value: 'male', label: 'Male', icon: maleOutline }, { value: 'female', label: 'Female', icon: femaleOutline }, { value: 'active', label: 'Active', icon: radioOutline }, { value: 'missing', label: 'Missing', icon: warningOutline }];
-const visible = computed(() => goats.value.filter((goat) => filter.value === 'all' || (['male', 'female'].includes(filter.value) ? goat.gender === filter.value : goat.status === filter.value)));
-const recentlySeen = computed(() => goats.value.filter((goat) => goat.last_seen).length);
-const attentionCount = computed(() => goats.value.filter((goat) => goat.status === 'missing' || !['healthy', 'good', 'normal'].includes(goat.health_status.toLowerCase())).length);
+const facets = computed(() => (pageData.value as GoatPage | null)?.facets);
+const registeredTotal = computed(() => facets.value?.all ?? total.value);
+const visible = computed(() => goats.value);
+const recentlySeen = computed(() => facets.value?.detected ?? goats.value.filter((goat) => goat.last_seen).length);
+const attentionCount = computed(() => facets.value?.attention ?? goats.value.filter((goat) => goat.status === 'missing' || !['healthy', 'good', 'normal'].includes(goat.health_status.toLowerCase())).length);
 function impact(style = ImpactStyle.Light) { void Haptics.impact({ style }).catch(() => undefined); }
-function filterCount(value: string) { return goats.value.filter((goat) => value === 'all' || (['male', 'female'].includes(value) ? goat.gender === value : goat.status === value)).length; }
+function filterCount(value: string) {
+  const counts = facets.value;
+  if (counts && value in counts) return counts[value as keyof typeof counts];
+  return goats.value.filter((goat) => value === 'all' || (['male', 'female'].includes(value) ? goat.gender === value : goat.status === value)).length;
+}
 function setFilter(value: string) { if (filter.value === value) return; filter.value = value; impact(); void reset(); }
 function criteriaChanged() { void reset(); }
 function clearFilters() { search.value = ''; filter.value = 'all'; void reset(); }

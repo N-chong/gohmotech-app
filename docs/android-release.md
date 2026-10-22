@@ -63,8 +63,8 @@ properties file.
 
 Before every distributed build, edit android/app/build.gradle:
 
-    versionCode 16
-    versionName "1.6"
+    versionCode 21
+    versionName "2.1"
 
 Every distributed APK must use a versionCode greater than every previously
 distributed build. versionName is the user-visible release label.

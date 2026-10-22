@@ -22,15 +22,15 @@
 
         <template v-else-if="data">
           <section class="dashboard-section living-environment">
-            <div class="rich-section-heading"><div><p class="eyebrow">{{ data.system.controller_online ? 'LIVE ENVIRONMENT' : 'LAST ENVIRONMENT READING' }}</p><h2>One sensor surface</h2></div><span :class="{ offline: !data.system.controller_online }"><i></i>{{ data.system.controller_online ? (changedMetric ? 'Value changed' : 'Live') : 'Device offline' }}</span></div>
-            <div class="environment-console" :class="{ changed: changedMetric === selectedEnvironment, stale: !data.system.controller_online }">
+            <div class="rich-section-heading"><div><p class="eyebrow">{{ data.environment.online ? 'LIVE ENVIRONMENT' : 'LAST ENVIRONMENT READING' }}</p><h2>One sensor surface</h2></div><span :class="{ offline: !data.environment.online }"><i></i>{{ data.environment.online ? (changedMetric ? 'Value changed' : 'Live') : 'Sensor offline' }}</span></div>
+            <div class="environment-console" :class="{ changed: changedMetric === selectedEnvironment, stale: !data.environment.online }">
               <div class="environment-selector" role="tablist" aria-label="Environmental readings">
                 <button v-for="metric in environmentMetrics" :key="metric.key" type="button" role="tab" :aria-selected="selectedEnvironment === metric.key" :class="{ active: selectedEnvironment === metric.key }" @click="selectEnvironment(metric.key)"><ion-icon :icon="metric.icon" />{{ metric.label }}</button>
               </div>
               <div class="environment-reading">
                 <div class="environment-value"><small>{{ activeEnvironment.kicker }}</small><strong :key="`${activeEnvironment.key}-${activeEnvironment.value}`">{{ activeEnvironment.display }}</strong><span v-if="activeDelta">{{ activeDelta > 0 ? '+' : '' }}{{ activeDelta.toFixed(1) }}{{ activeEnvironment.suffix }}</span></div>
                 <div class="environment-visual" :style="{ '--level': `${activeEnvironment.level}%` }"><div class="sensor-track"><i></i><b></b></div><div><span>LOW</span><span>LIVE RANGE</span><span>HIGH</span></div></div>
-                <footer><span><i></i>{{ data.system.controller_online ? activeEnvironment.status : 'DEVICE OFFLINE · LAST READING' }}</span><small>Updated {{ relativeTime(data.environment.updated_at) }}</small></footer>
+                <footer><span><i></i>{{ data.environment.online ? activeEnvironment.status : 'SENSOR OFFLINE · LAST READING' }}</span><small>{{ data.environment.last_seen ? `Seen ${relativeTime(data.environment.last_seen)}` : `Updated ${relativeTime(data.environment.updated_at)}` }}</small></footer>
               </div>
               <div class="environment-context"><span><ion-icon :icon="waterOutline" /><small>HUMIDITY</small><strong>{{ value(data.environment.humidity, '%') }}</strong></span><span><ion-icon :icon="sunnyOutline" /><small>LIGHT</small><strong>{{ value(data.environment.light_level, '%') }}</strong></span><router-link to="/app/automation"><ion-icon :icon="nutritionOutline" /><small>FEED</small><strong>{{ value(data.feed.percentage, '%') }}</strong></router-link></div>
             </div>

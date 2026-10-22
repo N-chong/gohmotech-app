@@ -28,6 +28,26 @@
 
         <div class="camera-position-dots" aria-label="Selected camera"><button v-for="camera in cameras" :key="camera.id" type="button" :class="{ active: camera.id === selected.id }" :aria-label="`Select ${camera.name}`" @click="select(camera)"></button></div>
         <div class="camera-signal-row"><span class="signal-chip" :class="{ connected: selected.status === 'active' }"><ion-icon :icon="wifiOutline" />{{ selected.status === 'active' ? 'CONNECTED' : 'OFFLINE' }}</span><span class="signal-chip connected"><ion-icon :icon="shieldCheckmarkOutline" />SECURE TICKET</span><span class="signal-chip"><ion-icon :icon="videocamOutline" />MJPEG · 640PX</span></div>
+        <section class="ai-detection-panel" :class="{ running: detectionStatus?.running }" aria-live="polite">
+          <header><span><ion-icon :icon="analyticsOutline" /></span><div><small>LOCAL AI MONITORING</small><h2>{{ detectionStatus?.mode || 'Checking detection service' }}</h2><p v-if="detectionStatus">{{ detectionStatus.camera.name }} · Every {{ detectionStatus.camera.detection_interval_seconds }} seconds</p></div><b><i></i>{{ detectionStatus?.running ? 'RUNNING' : 'STANDBY' }}</b></header>
+          <div v-if="detectionStatus" class="ai-detection-metrics">
+            <div><small>GOATS</small><strong>{{ detectionStatus.latest?.detection_count ?? '—' }}</strong></div>
+            <div><small>PERSONS</small><strong>{{ detectionStatus.latest?.persons?.count ?? '—' }}</strong></div>
+            <div><small>CONFIDENCE</small><strong>{{ detectionConfidence }}</strong></div>
+            <div><small>VIEWERS</small><strong>{{ detectionStatus.viewers }}</strong></div>
+          </div>
+          <p v-if="detectionStatus?.latest" class="ai-detection-update">Latest inference {{ relativeTime(detectionStatus.latest.timestamp) }}. Frames remain on the farm server; only detection results reach the app.</p>
+          <p v-else-if="detectionError" class="ai-detection-error">{{ detectionError }}</p>
+          <p v-else class="ai-detection-update">Waiting for the local inference worker to publish a result.</p>
+          <footer>
+            <span v-if="detectionStatus">Next scheduled window {{ relativeTime(detectionStatus.next_scheduled_at) }}</span>
+            <ion-button v-if="authState.user?.permissions.manage_farm && detectionStatus" size="small" :disabled="detectionBusy" :color="detectionStatus.manual_enabled ? 'danger' : 'primary'" @click="toggleManualDetection">
+              <ion-icon slot="start" :icon="detectionStatus.manual_enabled ? stopOutline : playOutline" />
+              {{ detectionBusy ? 'Updating…' : detectionStatus.manual_enabled ? 'Stop manual' : 'Start manual' }}
+            </ion-button>
+            <ion-button v-else-if="detectionError" size="small" fill="outline" :disabled="detectionBusy" @click="heartbeatDetection"><ion-icon slot="start" :icon="refreshOutline" />Retry AI status</ion-button>
+          </footer>
+        </section>
         <section v-if="error" class="camera-error-panel"><ion-icon :icon="alertCircleOutline" /><div><strong>Stream interrupted</strong><p>The secure camera stream is unavailable. Reconnect or check the camera system.</p></div></section>
         <section class="camera-context-strip"><div><small>SELECTED CAMERA</small><strong>{{ selected.camera_id }}</strong></div><div><small>LAST CONNECTED</small><strong>{{ selected.last_connected ? relativeTime(selected.last_connected) : 'No timestamp' }}</strong></div><button type="button" @click="openCameraInfo">DETAILS <ion-icon :icon="chevronForwardOutline" /></button></section>
       </template>
@@ -44,17 +64,21 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { IonButton, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonSpinner, IonTitle, IonToolbar, onIonViewDidEnter, onIonViewDidLeave } from '@ionic/vue';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { alertCircleOutline, chevronForwardOutline, expandOutline, informationCircleOutline, pulseOutline, refreshOutline, scanOutline, shieldCheckmarkOutline, swapHorizontalOutline, timeOutline, videocamOffOutline, videocamOutline, wifiOutline } from 'ionicons/icons';
+import { alertCircleOutline, analyticsOutline, chevronForwardOutline, expandOutline, informationCircleOutline, playOutline, pulseOutline, refreshOutline, scanOutline, shieldCheckmarkOutline, stopOutline, swapHorizontalOutline, timeOutline, videocamOffOutline, videocamOutline, wifiOutline } from 'ionicons/icons';
 import NetworkBanner from '@/components/NetworkBanner.vue';
 import StatePanel from '@/components/StatePanel.vue';
 import { cameraService } from '@/services/camera.service';
+import { createDetectionViewerToken, liveDetectionService, type LiveDetectionStatus } from '@/services/live-detection.service';
+import { authState } from '@/stores/auth.store';
 import type { Camera } from '@/types/api';
 import { relativeTime, titleCase } from '@/utils/format';
 
 const cameras = ref<Camera[]>([]); const selected = ref<Camera>(); const streamUrl = ref(''); const loading = ref(true); const error = ref(''); const playing = ref(false); const now = ref(new Date()); const lastUpdatedAt = ref<string | null>(null);
 const controlsVisible = ref(false); const cameraInfoOpen = ref(false); const pointerX = ref(0); let controlsTimer: number | undefined; let clockTimer: number | undefined; let listController: AbortController | undefined; let streamController: AbortController | undefined; let streamGeneration = 0; let pageActive = false;
+const detectionStatus = ref<LiveDetectionStatus>(); const detectionError = ref(''); const detectionBusy = ref(false); const detectionViewerToken = createDetectionViewerToken(); let detectionTimer: number | undefined; let detectionController: AbortController | undefined;
 const activeCount = computed(() => cameras.value.filter((camera) => camera.status === 'active').length);
 const currentTime = computed(() => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(now.value));
+const detectionConfidence = computed(() => detectionStatus.value?.latest ? `${Math.round(detectionStatus.value.latest.confidence * 100)}%` : '—');
 function impact() { void Haptics.impact({ style: ImpactStyle.Light }).catch(() => undefined); }
 async function connect(camera: Camera) {
   streamController?.abort();
@@ -95,13 +119,44 @@ async function load() {
 }
 function streamFailed() { playing.value = false; error.value = 'The camera stream stopped.'; }
 async function fullscreen() { impact(); const stage = document.querySelector('.interactive-viewer') as HTMLElement | null; await stage?.requestFullscreen?.(); }
+async function heartbeatDetection() {
+  detectionController?.abort();
+  const controller = new AbortController();
+  detectionController = controller;
+  detectionBusy.value = !detectionStatus.value;
+  try {
+    const result = await liveDetectionService.view(detectionViewerToken, controller.signal);
+    if (pageActive && !controller.signal.aborted) { detectionStatus.value = result; detectionError.value = ''; }
+  } catch {
+    if (pageActive && !controller.signal.aborted) detectionError.value = 'Local AI detection status is unavailable. Deploy the updated mobile backend and confirm Redis is online.';
+  } finally {
+    if (detectionController === controller) { detectionController = undefined; detectionBusy.value = false; }
+  }
+}
+async function toggleManualDetection() {
+  if (!detectionStatus.value || detectionBusy.value) return;
+  const stopping = detectionStatus.value.manual_enabled;
+  if (!window.confirm(stopping ? 'Stop manual AI detection?' : 'Start continuous manual AI detection while this page remains active?')) return;
+  detectionBusy.value = true; detectionError.value = ''; impact();
+  try {
+    detectionStatus.value = stopping
+      ? await liveDetectionService.manualStop(detectionViewerToken)
+      : await liveDetectionService.manualStart(detectionViewerToken);
+  } catch (reason) {
+    detectionError.value = reason instanceof Error ? reason.message : 'Unable to update live detection.';
+  } finally { detectionBusy.value = false; }
+}
+function startDetection() { void heartbeatDetection(); detectionTimer = window.setInterval(() => { void heartbeatDetection(); }, 20_000); }
+function stopDetection() { if (detectionTimer) window.clearInterval(detectionTimer); detectionTimer = undefined; detectionController?.abort(); detectionController = undefined; detectionBusy.value = false; void liveDetectionService.leave(detectionViewerToken).catch(() => undefined); }
 function startPage() {
   pageActive = true; now.value = new Date();
   if (!clockTimer) clockTimer = window.setInterval(() => { now.value = new Date(); }, 1000);
+  startDetection();
   void load();
 }
 function stopPage() {
   pageActive = false; streamGeneration += 1; listController?.abort(); listController = undefined; streamController?.abort(); streamController = undefined;
+  stopDetection();
   streamUrl.value = ''; playing.value = false; controlsVisible.value = false; cameraInfoOpen.value = false;
   if (clockTimer) window.clearInterval(clockTimer); clockTimer = undefined;
   if (controlsTimer) window.clearTimeout(controlsTimer); controlsTimer = undefined;

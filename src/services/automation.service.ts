@@ -3,6 +3,7 @@ import { actuatorConnectivity, applyActuatorStatus, canControlActuator } from '@
 
 export interface Actuator {
   id: number;
+  device: number;
   device_name: string;
   actuator_type: 'door' | 'light' | 'feeder';
   current_state: string;
